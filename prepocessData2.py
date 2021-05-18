@@ -1,8 +1,8 @@
 import glob
 #files = glob.glob("./rawData/newDataTotal/2020-9-24/*.csv")
-files = glob.glob("./rawData/newDataTotal/testChair/*.csv")
+files = glob.glob("./dataPlace/raw/*.csv")
 for fileName in files:
-    nameF2 = "./processedData/chair_test/" + fileName.split("/")[-1]
+    nameF2 = "./dataPlace/process/" + fileName.split("/")[-1]
     print(nameF2)
     nameF1 = fileName
     with open(nameF1, "r+") as f1:

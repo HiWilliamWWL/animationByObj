@@ -8,11 +8,19 @@ import matplotlib.pyplot as plt
 from math import sqrt, log
 import time
 
+
 #fileName = "./part0/wwl_table_drag_r_002.data"
 #fileName = "./part1/tina_box2_l1s_b_003.data"
 objName = "tripod"
 
-fileName = "./part0/zyf_box_l1s_b_001.data"
+#fileName = "./part0/zyf_box_l1s_b_001.data"
+#fileName = "./liftOnly/t1.data"
+fileName = "./dataPlace/dataReady/May7Task_001.data"
+connections = [(0, 1), (1, 2), (2, 3), (3, 4), 
+                             (2, 5), (5, 6), (6, 7), (7, 8), 
+                             (2, 9), (9, 10), (10, 11), (11, 12),
+                             (0, 13), (13, 14), (14, 15), 
+                             (0, 16), (16, 17), (17, 18), (15,19), (18,20)]
     
 
 def getNormVecs(xc, yc, zc, markerDataFrame0):
@@ -36,6 +44,7 @@ def getNormVecs(xc, yc, zc, markerDataFrame0):
 def relocateData(dataList, objName, startFrame = 0):
     bodyData = np.array(dataList[0])
     lenFrame = bodyData.shape[0]
+    print(bodyData.shape)
     name = objName
     bbx= 0.1
     bby = 0.1
@@ -45,6 +54,8 @@ def relocateData(dataList, objName, startFrame = 0):
     #objData = np.array(dataList[2])
     markerData = np.array(dataList[3])
     rigidPos = np.array(dataList[2])
+    print(rigidPos.shape)
+    print(markerData.shape)
     #print(rigidPos[200:400, :3])
     '''
     newCoPos = np.mean(np.array(dataList[3][0]), axis=0)
@@ -107,6 +118,9 @@ def relocateData(dataList, objName, startFrame = 0):
         z_points = bodyData[displayFrame, :, 2]
         x_points = bodyData[displayFrame, :, 0]
         y_points = bodyData[displayFrame, :, 1]
+        for connect in connections:
+            a,b = connect
+            ax.plot([x_points[a], x_points[b]],[y_points[a],y_points[b]],[z_points[a],z_points[b]], color="r")
         ax.scatter3D(x_points, y_points, z_points, color="r")
         #'''
         
@@ -147,6 +161,9 @@ def relocateData(dataList, objName, startFrame = 0):
     z_points = bodyData[startFrame, :, 2]
     x_points = bodyData[startFrame, :, 0]
     y_points = bodyData[startFrame, :, 1]
+    for connect in connections:
+            a,b = connect
+            ax.plot([x_points[a], x_points[b]],[y_points[a],y_points[b]],[z_points[a],z_points[b]], color="r")
     ax.scatter3D(x_points, y_points, z_points, color="r")
     #'''
     z_points = markerData[startFrame, :, 2]
@@ -176,6 +193,8 @@ def relocateData(dataList, objName, startFrame = 0):
 
 with open(fileName, 'rb') as f:
     dataList = pickle.load(f)[0]
+    #dataList = pickle.load(f)
+    print(len(dataList))
     startFrame = 75
     '''
     for i in range(len(dataList[0])):

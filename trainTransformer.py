@@ -6,22 +6,21 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import dataLoader
 import numpy as np
+import pickle
 
 class TokenEmbedding(layers.Layer):
   def __init__(self, maxlen, num_hid=32):
     super().__init__()
-    self.denseEmb = tf.keras.layers.Dense(num_hid)
+    self.denseEmb1 = tf.keras.layers.Dense(32)
+    self.denseEmb2 = tf.keras.layers.Dense(num_hid)
     self.pos_emb = layers.Embedding(input_dim=maxlen, output_dim=num_hid)
 
   def call(self, x):
     maxlen = x.shape[-2]
-    x = self.denseEmb(x)
-    print("enter emb")
-    print(x)
+    x = self.denseEmb1(x)
+    x = self.denseEmb2(x)
     positions = tf.range(start=0, limit=maxlen, delta=1)
-    print(positions)
     positions = self.pos_emb(positions)
-    print(positions)
     result = x + positions
     return result
 
@@ -77,7 +76,7 @@ class TransformerDecoder(layers.Layer):
         num_heads=num_heads, key_dim=embed_dim
     )
     self.enc_att = layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
-    self.self_dropout = layers.Dropout(0.5)
+    self.self_dropout = layers.Dropout(0.1)
     self.enc_dropout = layers.Dropout(0.1)
     self.ffn_dropout = layers.Dropout(0.1)
     self.ffn = keras.Sequential(
@@ -156,21 +155,18 @@ class Transformer(keras.Model):
     print("in call")
     source = inputs[0]
     target = inputs[1]
-    print(source)
-    print(target)
     
     x = self.encoder(source)
     y = self.decode(x, target)
-    print(y)
-    
-    return self.classifier(y)
+    result = self.classifier(y)
+    return result
     
 
   def train_step(self, batch):
     """Processes one batch inside model.fit()."""
     source, target = batch
-    dec_input = target[:, :-1]
-    dec_target = target[:, 1:]
+    dec_input = target[:, :-1, :]
+    dec_target = target[:, 1:, :]
     y = dec_target
     with tf.GradientTape() as tape:
         y_pred = self([source, dec_input], training=True)
@@ -181,6 +177,36 @@ class Transformer(keras.Model):
     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
     #self.compiled_metrics.update_state(loss)
     self.compiled_metrics.update_state(y, y_pred)
+    #return {"loss": self.loss_metric.result()}
+    return {m.name: m.result() for m in self.metrics}
+
+  def train_step_notUsing(self, batch):
+    """Processes one batch inside model.fit()."""
+    source, target = batch
+    dec_input = target[:, :-1]
+    dec_target = target[:, 1:]
+    y = dec_target
+    dec2_input = dec_input[:, 0, :]
+    dec2_input = tf.expand_dims(dec2_input, axis=-2)
+    dec2_input = tf.dtypes.cast(dec2_input, tf.float32)
+    with tf.GradientTape() as tape:
+      enc = self.encoder(source)
+      
+      for i in range(self.target_maxlen - 1):
+        dec_out = self.decode(enc, dec2_input)
+        
+        out = self.classifier(dec_out)
+        
+        out = out[:, -1, :]
+        out = tf.expand_dims(out, axis=1)
+        dec2_input = tf.concat([dec2_input, out], axis=-2)
+        
+      loss = self.compiled_loss(y, dec2_input[:, -1, :])
+    trainable_vars = self.trainable_variables
+    gradients = tape.gradient(loss, trainable_vars)
+    self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    #self.compiled_metrics.update_state(loss)
+    self.compiled_metrics.update_state(y, dec2_input[:, -1, :])
     #return {"loss": self.loss_metric.result()}
     return {m.name: m.result() for m in self.metrics}
 
@@ -195,29 +221,40 @@ class Transformer(keras.Model):
     loss = self.compiled_loss(dec_target, y_pred=preds)
     return {m.name: m.result() for m in self.metrics}
 
-  def generate(self, source, dec_target):
+  def generate(self, source, dec_start_input, dec_Pre= None):
     """Performs inference over one batch of inputs using greedy decoding."""
-    source = source.reshape((-1, 60, 6))
+    source = source.reshape((1, self.target_maxlen, 6))
     enc = self.encoder(source)
-    dec_input = dec_target
-    dec_logits = []
+    print("enter the loop")
     for i in range(self.target_maxlen - 1):
-        dec_out = self.decode(enc, dec_input)
-        out = self.classifier(dec_out)
-        dec_input = tf.concat([dec_input, out], axis=-1)
-    return dec_input
+      dec_out = self.decode(enc, dec_start_input)
+      #print("decode sccuess")
+      #print(dec_out.shape)
+      out = self.classifier(dec_out)
+      out = out[:, -1, :]
+      out = tf.expand_dims(out, axis=1)
+      #print(out.shape)
+      #print("end")
+      dec_start_input = tf.concat([dec_start_input, out], axis=-2)
+      #print(dec_start.shape)
+      #print("end loop")
+      #print()
+    loss = self.compiled_loss(dec_start_input[:,1:,:], y_pred=dec_Pre[:,:,:])
+    print(loss)
+    print("++++++++")
+    return dec_start_input
 
 
 
-max_target_len = 60
+max_target_len = 150
 model = Transformer(
-    num_hid=64,
-    num_head=2,
-    num_feed_forward=400,
+    num_hid=128,
+    num_head=5,
+    num_feed_forward=200,
     source_maxlen=max_target_len,
     target_maxlen=max_target_len,
-    num_layers_enc=4,
-    num_layers_dec=1,
+    num_layers_enc=5,
+    num_layers_dec=2,
     num_classes=63,
 )
 
@@ -226,12 +263,44 @@ model.compile(optimizer=optimizer, loss="mse", metrics="mse")
 
 loader = dataLoader.trainDataLoader()
 full_dataset = loader.getDataset2()
-full_dataset = full_dataset.shuffle(3)
+full_dataset = full_dataset.shuffle(2)
 #val_dataset = full_dataset.take(100) 
 #train_dataset = full_dataset.skip(100)
 full_dataset = full_dataset.batch(1)
 
-model.fit(full_dataset, epochs = 10)
+model.fit(full_dataset, epochs = 30)
+full_dataset = full_dataset.shuffle(5)
+test_1 = full_dataset.take(1)
+
+testx = None
+testStart=None
+testWhole = None
+for e in test_1:
+  x,y = e
+  testx = x.numpy()
+  testStart = y.numpy()[0,0,:]
+  testPre = y.numpy()[0,1:,:]
+print(testx.shape)
+print(testStart.shape)
+testStart = testStart.reshape((1,1,63))
+testPre = testPre.reshape((1,149,63))
+testPreSave = testPre[:,:,:]
+
+testResult = model.generate(testx, testStart, tf.convert_to_tensor(testPre, dtype=tf.float32) )
+
+with open("./testResult5.pb", 'wb') as pickle_file:
+  initalPos = testResult.numpy()[0,0,:]
+  #dataList = pickle.dump(testResult.numpy()[0, 1:, :]+initalPos, pickle_file)
+  #initalPos = testStart.reshape((1,63))
+  #dataList = pickle.dump(testPreSave[0, :, :]+initalPos, pickle_file)
+  print(testPreSave[0, -1, :])
+  print(testResult.numpy()[0, -1, :])
+  dataList = pickle.dump(testResult.numpy()[0, 1:, :] / 7.0 +initalPos, pickle_file)
+with open("./testResult_gt5.pb", 'wb') as pickle_file:
+  initalPos = testResult.numpy()[0,0,:]
+  #dataList = pickle.dump(testResult.numpy()[0, 1:, :]+initalPos, pickle_file)
+  #initalPos = testStart.reshape((1,63))
+  dataList = pickle.dump(testPreSave[0, :, :] / 7.0 +initalPos, pickle_file)
 
 '''
 x = np.random.random((1000, 60,6))
