@@ -15,7 +15,7 @@ objName = "tripod"
 
 #fileName = "./part0/zyf_box_l1s_b_001.data"
 #fileName = "./liftOnly/t1.data"
-fileName = "./dataPlace/dataReady/May7Task_001.data"
+fileName = "./dataPlace/dataReady/May7Task_023.data"
 connections = [(0, 1), (1, 2), (2, 3), (3, 4), 
                              (2, 5), (5, 6), (6, 7), (7, 8), 
                              (2, 9), (9, 10), (10, 11), (11, 12),
@@ -118,6 +118,8 @@ def relocateData(dataList, objName, startFrame = 0):
         z_points = bodyData[displayFrame, :, 2]
         x_points = bodyData[displayFrame, :, 0]
         y_points = bodyData[displayFrame, :, 1]
+        #print(bodyData[displayFrame, :])
+        #print()
         for connect in connections:
             a,b = connect
             ax.plot([x_points[a], x_points[b]],[y_points[a],y_points[b]],[z_points[a],z_points[b]], color="r")
@@ -195,7 +197,7 @@ with open(fileName, 'rb') as f:
     dataList = pickle.load(f)[0]
     #dataList = pickle.load(f)
     print(len(dataList))
-    startFrame = 75
+    startFrame = 20
     '''
     for i in range(len(dataList[0])):
         if dataList[1][i] > 0:

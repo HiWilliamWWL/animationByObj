@@ -5,13 +5,20 @@ import pickle
 from scipy.spatial.transform import Rotation as R
 
 #startEnd = {"t1":[220,360], "t2":[60, 320], "t3":[240, 350], "t4":[120, 260], "t5":[85, 230], "t6":[60, 270]}
-startEnd = {"t1":[180,360], "t2":[30, 320], "t3":[180, 350], "t4":[60, 260], "t5":[30, 230], "t6":[20, 270]}
+startEnd = {"t1":[180,360], "t2":[30, 320], "t3":[180, 350], "t4":[60, 260], "t5":[30, 230], "t6":[20, 270],
+            "n1":[50, 270], "n2":[100, 290], "n3":[80, 300], "n4":[130, 290], "n5":[75, 210], "n6":[100, 270],
+            "n7":[100, 280], "n8":[70, 280], "n9":[120, 300], "n10":[20, 115], "n11":[100, 230], "n12":[70, 230],
+            "n13":[60, 200], "n14":[50, 180], "n15":[60, 190], "n16":[60, 160], "n17":[100, 240], "n18":[70, 270],
+            "n19":[90, 260], "n20":[70, 280], "n21":[80, 260], "n22":[80, 240], "n23":[90, 280]}
 
 class trainDataLoader:
     def __init__(self):
         self.skeletonData = []
         self.objectPosData = []
+        self.objectMarkerData = []
         self.shapes = [[],[]]
+        self.obj_data = []
+        self.skeleton_data = []
         self.loadFromFile()
         
     
@@ -31,6 +38,7 @@ class trainDataLoader:
                 step = 2
                 bodyData = []
                 rigidPos = []
+                markerPos = []
                 for i in range(start, end, step):
                     bodyCenter = np.array(dataList[0][i][:3])
 
@@ -43,8 +51,13 @@ class trainDataLoader:
                     objRot = R.from_quat(dataList[2][i][3:])
                     objRot = objRot.as_euler("xyz").tolist()
                     rigidPos.append(np.array(objPos+objRot))
+
+                    objMarkers = np.array(dataList[3][i]) - bodyCenter
+                    markerPos.append(objMarkers.reshape((12*3)))
+
                 self.skeletonData.append(np.array(bodyData))
                 self.objectPosData.append(np.array(rigidPos))
+                self.objectMarkerData.append(np.array(markerPos))
                 seqLength = len(bodyData)
                 print(seqLength)
                 self.shapes[0].append([seqLength, 6])
@@ -93,25 +106,55 @@ class trainDataLoader:
 
         max_length = 150
 
-        obj_data = []
-        skeleton_data = []
+        
 
         for file_count in range(len(self.skeletonData)):
             pos_zeros = np.zeros((max_length, 63))
             obj_zeros = np.zeros((max_length, 6))
             inital_pos = np.array(skeletonPart[file_count][0]).astype(dt)
-            delta_pos = (np.array(skeletonPart[file_count][1:]).astype(dt) - inital_pos) * 7.0
+            delta_pos = (np.array(skeletonPart[file_count][1:]).astype(dt) - inital_pos) * 5.0
             pos_whole = np.concatenate((np.array(skeletonPart[file_count][0]).reshape((1,63)), delta_pos), axis=0).astype(dt)
             obj_whole = np.array(objPart[file_count][:]).astype(dt)
 
             pos_zeros[:pos_whole.shape[0],:pos_whole.shape[1]] = pos_whole
             obj_zeros[:obj_whole.shape[0],:obj_whole.shape[1]] = obj_whole
 
-            obj_data.append(obj_zeros)
-            skeleton_data.append(pos_zeros)
+            self.obj_data.append(obj_zeros)
+            self.skeleton_data.append(pos_zeros)
         dataset = tf.data.Dataset.from_tensor_slices((obj_data, skeleton_data))
 
         return dataset
 
+    def getDataset3(self):
+        # Create dataset includes marker pos
+        skeletonPart = self.skeletonData
+        dt = np.float32
+        objPart = self.objectMarkerData
+
+        max_length = 130
+
+        for file_count in range(len(self.skeletonData)):
+            pos_zeros = np.zeros((max_length, 63))
+            obj_zeros = np.zeros((max_length, 36))
+            inital_pos = np.array(skeletonPart[file_count][0]).astype(dt)
+            delta_pos = (np.array(skeletonPart[file_count][1:]).astype(dt) - inital_pos) * 5.0
+            pos_whole = np.concatenate((np.array(skeletonPart[file_count][0]).reshape((1,63)), delta_pos), axis=0).astype(dt)
+            
+            obj_whole = np.array(objPart[file_count][:]).astype(dt)
+
+            pos_zeros[:pos_whole.shape[0],:pos_whole.shape[1]] = pos_whole
+            obj_zeros[:obj_whole.shape[0],:obj_whole.shape[1]] = obj_whole
+
+            self.obj_data.append(obj_zeros)
+            self.skeleton_data.append(pos_zeros)
+        dataset = tf.data.Dataset.from_tensor_slices((self.obj_data, self.skeleton_data))
+        return dataset
+    
+    def getSingleSample(self, file_num):
+        x = self.obj_data[file_num]
+        y = self.skeleton_data[file_num]
+        return x,y
+
+
 #t = trainDataLoader()
-#t.getDataset2()
+#t.getDataset3()
