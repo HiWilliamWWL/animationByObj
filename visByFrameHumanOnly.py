@@ -14,11 +14,12 @@ import sys
 objName = "tripod"
 
 #fileName = "testResult.pb"
-fileName = "testResult_5a.pb"
+testFilePath = "./test1/"
+fileName = testFilePath + "testResult_a.pb"
 if len(sys.argv) == 3:
-    fileName = "testResult_gt5.pb"
+    fileName = testFilePath+"testResult_t.pb"
 elif len(sys.argv) == 2:
-    fileName = "testResult_5b.pb"
+    fileName = testFilePath+"testResult_b.pb"
 
 connections = [(0, 1), (1, 2), (2, 3), (3, 4), 
                              (2, 5), (5, 6), (6, 7), (7, 8), 

@@ -4,27 +4,31 @@ from tensorflow.keras import layers
 
 
 def maskLabelLoss(yTrue, yPred):
-  zerosPattern = tf.zeros_like(yTrue)
-  mask = not yTrue == zerosPattern
+  zerosPattern = tf.zeros_like(yPred)
+  print(yTrue.shape)
+  print(yPred.shape)
+  #zerosPattern = tf.zeros_like((-1,129,63), dtype=tf.float32)
+  mask = tf.math.abs(yTrue) > zerosPattern
   
   yTrue_m = tf.boolean_mask(yTrue, mask)
   yPred_m = tf.boolean_mask(yPred, mask)
   print(yTrue_m)
+  print("------------------")
   return tf.keras.losses.MSE(yTrue_m, yPred_m)
 
 
 class TokenEmbeddingObj(layers.Layer):
   def __init__(self, maxlen, num_hid):
     super().__init__()
-    self.denseEmb1 = tf.keras.layers.Dense(64)
-    self.denseEmb2 = tf.keras.layers.Dense(64)
+    #self.denseEmb1 = tf.keras.layers.Dense(64)
+    #self.denseEmb2 = tf.keras.layers.Dense(64)
     self.denseEmb3 = tf.keras.layers.Dense(num_hid)
     self.pos_emb = layers.Embedding(input_dim=maxlen, output_dim=num_hid)
 
   def call(self, x):
     maxlen = x.shape[-2]
-    x = self.denseEmb1(x)
-    x = self.denseEmb2(x)
+    #x = self.denseEmb1(x)
+    #x = self.denseEmb2(x)
     x = self.denseEmb3(x)
     positions = tf.range(start=0, limit=maxlen, delta=1)
     positions = self.pos_emb(positions)
@@ -34,13 +38,13 @@ class TokenEmbeddingObj(layers.Layer):
 class TokenEmbeddingPpl(layers.Layer):
   def __init__(self, maxlen, num_hid):
     super().__init__()
-    #self.denseEmb1 = tf.keras.layers.Dense(96)
+    self.denseEmb1 = tf.keras.layers.Dense(64)
     self.denseEmb2 = tf.keras.layers.Dense(num_hid)
     self.pos_emb = layers.Embedding(input_dim=maxlen, output_dim=num_hid)
 
   def call(self, x):
     maxlen = x.shape[-2]
-    #x = self.denseEmb1(x)
+    x = self.denseEmb1(x)
     x = self.denseEmb2(x)
     #positions = tf.range(start=0, limit=maxlen, delta=1)
     #positions = self.pos_emb(positions)
@@ -169,6 +173,7 @@ class Transformer(keras.Model):
 
   def train_step(self, batch):
     """Processes one batch inside model.fit()."""
+    print("using oritnal train step")
     source, target = batch
     dec_input = target[:, :-1, :]
     dec_target = target[:, 1:, :]
@@ -185,6 +190,7 @@ class Transformer(keras.Model):
     #return {"loss": self.loss_metric.result()}
     return {m.name: m.result() for m in self.metrics}
 
+  '''
   def train_step_notUsing(self, batch):
     """Processes one batch inside model.fit()."""
     source, target = batch
@@ -214,8 +220,10 @@ class Transformer(keras.Model):
     self.compiled_metrics.update_state(y, dec2_input[:, -1, :])
     #return {"loss": self.loss_metric.result()}
     return {m.name: m.result() for m in self.metrics}
-
+  '''
+  
   def test_step(self, batch):
+    print("using oritnal test step")
     x, y = batch
     source = x
     target = y
@@ -239,7 +247,7 @@ class Transformer(keras.Model):
     return preds
 
   def generate(self, source, dec_start_input, dec_Pre= None):
-    """Performs inference over one batch of inputs using greedy decoding."""
+    print("using oritnal generate step")
     source = source.reshape((1, self.target_maxlen, 36))
     enc = self.encoder(source)
     print("enter the loop")
@@ -256,7 +264,89 @@ class Transformer(keras.Model):
       #print(dec_start.shape)
       #print("end loop")
       #print()
-    loss = self.compiled_loss(dec_start_input[:,1:,:], y_pred=dec_Pre[:,:,:])
-    print(loss)
+    #loss = self.compiled_loss(dec_start_input[:,1:,:], y_pred=dec_Pre[:,:,:])
+    #print(loss)
     print("++++++++")
     return dec_start_input
+
+class Transformer_pre2pre(Transformer):
+  def __init__(
+        self, num_hid=64, num_head=2, num_feed_forward=128, source_maxlen=60, target_maxlen=60, num_layers_enc=4, num_layers_dec=1, num_classes=10):
+        super().__init__(num_hid, num_head, num_feed_forward, source_maxlen, target_maxlen, num_layers_enc, num_layers_dec, num_classes)
+  
+  def train_step(self, batch):
+    """Processes one batch inside model.fit()."""
+    print("using new train step")
+    source, target = batch
+    dec_input = target[:, :-1]
+    dec_target = target[:, 1:]
+    y = dec_target
+    dec2_input = dec_input[:, 0, :]
+    dec2_input = tf.expand_dims(dec2_input, axis=-2)
+    dec2_input = tf.dtypes.cast(dec2_input, tf.float32)
+    with tf.GradientTape() as tape:
+      enc = self.encoder(source)
+      
+      for i in range(self.target_maxlen - 1):
+        dec_out = self.decode(enc, dec2_input)
+        
+        out = self.classifier(dec_out)
+        
+        if i == self.target_maxlen - 2:
+          result = tf.identity(out)
+        out = out[:, -1, :]
+        out = tf.expand_dims(out, axis=1)
+        dec2_input = tf.concat([dec2_input, out], axis=-2)
+      print("++++++++++++++")
+      print(result.shape)
+      print(y.shape)
+      loss = self.compiled_loss(y, result)
+    trainable_vars = self.trainable_variables
+    gradients = tape.gradient(loss, trainable_vars)
+    self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    #self.compiled_metrics.update_state(loss)
+    self.compiled_metrics.update_state(y, dec2_input[:, -1, :])
+    #return {"loss": self.loss_metric.result()}
+    return {m.name: m.result() for m in self.metrics}
+
+class Transformer_newScheduleSampling(Transformer):
+  def __init__(
+        self, num_hid=64, num_head=2, num_feed_forward=128, source_maxlen=60, target_maxlen=60, num_layers_enc=4, num_layers_dec=1, num_classes=10):
+        super().__init__(num_hid, num_head, num_feed_forward, source_maxlen, target_maxlen, num_layers_enc, num_layers_dec, num_classes)
+  
+  def train_step(self, batch):
+    """Processes one batch inside model.fit()."""
+    print("using new train step 2")
+    source, target = batch
+    dec_input = target[:, :-1, :]
+    dec_input = tf.dtypes.cast(dec_input, tf.float32)
+    dec_target = target[:, 1:, :]
+    y = dec_target
+    with tf.GradientTape() as tape:
+        y_pred1 = self([source, dec_input], training=True)
+        loss1 = self.compiled_loss(y, y_pred1, regularization_losses=self.losses)
+        new_input = tf.concat((tf.expand_dims(dec_input[:,0,:], axis=1), y_pred1[:,:-1,:]), axis=1)
+        print(new_input.shape)
+        print("++++++++++++++")
+        y_pred2 = self([source, new_input], training=True)
+        loss2 = self.compiled_loss(y, y_pred2, regularization_losses=self.losses)
+        loss = loss1+loss2
+    trainable_vars = self.trainable_variables
+    gradients = tape.gradient(loss, trainable_vars)
+    self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    #self.compiled_metrics.update_state(loss)
+    self.compiled_metrics.update_state(y, y_pred2)
+    #return {"loss": self.loss_metric.result()}
+    return {m.name: m.result() for m in self.metrics}
+    
+  def test_step2(self, batch):
+    x, y = batch
+    source = x
+    target = y
+    dec_input = target[:, :-1]
+    dec_target = target[:, 1:]
+
+    preds = self([source, dec_input])
+    loss = self.compiled_loss(dec_target, y_pred=preds)
+    print(loss)
+    return preds

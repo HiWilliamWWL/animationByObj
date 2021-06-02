@@ -20,6 +20,20 @@ class trainDataLoader:
         self.obj_data = []
         self.skeleton_data = []
         self.loadFromFile()
+        self.pos_mean = 0.0
+        self.delta_mean = 0.0
+        self.pos_std = 0.0
+        self.delta_std = 0.0
+        self.prepared = False
+        
+    def updateNorm(self):
+        temp_pos = np.array(self.obj_data).flatten()
+        temp_pos = np.concatenate((temp_pos, np.array(self.skeleton_data)[:, 0, :].flatten()))
+        self.pos_mean = np.mean(temp_pos)
+        self.pos_std = np.std(temp_pos)
+        temp_delta = np.array(self.skeleton_data)[:, 1:, :].flatten()
+        self.delta_mean = np.mean(temp_delta)
+        self.delta_std = np.std(temp_delta)
         
     
     def loadFromFile(self, pathName = "./liftOnly/*.data"):
@@ -41,6 +55,7 @@ class trainDataLoader:
                 markerPos = []
                 for i in range(start, end, step):
                     bodyCenter = np.array(dataList[0][i][:3])
+                    #bodyCenter = np.array(dataList[0][0][:3])
 
                     bodyWhole = np.array(dataList[0][i]).reshape((21,3)) - bodyCenter
                     bodyWhole = bodyWhole.reshape((63))
@@ -106,8 +121,6 @@ class trainDataLoader:
 
         max_length = 150
 
-        
-
         for file_count in range(len(self.skeletonData)):
             pos_zeros = np.zeros((max_length, 63))
             obj_zeros = np.zeros((max_length, 6))
@@ -125,7 +138,7 @@ class trainDataLoader:
 
         return dataset
 
-    def getDataset3(self):
+    def prepareDataset(self):
         # Create dataset includes marker pos
         skeletonPart = self.skeletonData
         dt = np.float32
@@ -137,7 +150,7 @@ class trainDataLoader:
             pos_zeros = np.zeros((max_length, 63))
             obj_zeros = np.zeros((max_length, 36))
             inital_pos = np.array(skeletonPart[file_count][0]).astype(dt)
-            delta_pos = (np.array(skeletonPart[file_count][1:]).astype(dt) - inital_pos) * 5.0
+            delta_pos = (np.array(skeletonPart[file_count][1:]).astype(dt) - inital_pos)
             pos_whole = np.concatenate((np.array(skeletonPart[file_count][0]).reshape((1,63)), delta_pos), axis=0).astype(dt)
             
             obj_whole = np.array(objPart[file_count][:]).astype(dt)
@@ -147,6 +160,17 @@ class trainDataLoader:
 
             self.obj_data.append(obj_zeros)
             self.skeleton_data.append(pos_zeros)
+        self.updateNorm()
+        for i in range(len(self.obj_data)):
+            #self.obj_data[i] = (self.obj_data[i] - self.pos_mean) / self.pos_std
+            #self.skeleton_data[i][0, :] = (self.skeleton_data[i][0, :] - self.pos_mean) / self.pos_std
+            self.skeleton_data[i][1:, :] = (self.skeleton_data[i][1:, :] - self.delta_mean) / ( self.delta_std)
+            #self.skeleton_data[i][1:, :] *= 5.0
+    
+    def getDataset3(self):
+        if not self.prepared:
+            self.prepareDataset()
+            self.prepared = True
         dataset = tf.data.Dataset.from_tensor_slices((self.obj_data, self.skeleton_data))
         return dataset
     
