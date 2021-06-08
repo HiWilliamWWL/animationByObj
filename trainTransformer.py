@@ -9,7 +9,7 @@ import numpy as np
 import pickle
 import ABOtransformer
 
-train_mode = True
+train_mode = False
 
 max_target_len = 130
 '''
@@ -34,10 +34,20 @@ model = ABOtransformer.Transformer_newScheduleSampling(
     num_layers_dec=2,
     num_classes=63,
 )
+'''
+model = ABOtransformer.Transformer_pre2pre(
+    num_hid=128,
+    num_head=4,
+    num_feed_forward=128,
+    source_maxlen=max_target_len,
+    target_maxlen=max_target_len,
+    num_layers_enc=4,
+    num_layers_dec=2,
+    num_classes=63,
+)
+'''
 
-
-
-batch_size = 2
+batch_size = ABOtransformer.batch_size
 epoch_num = 50
 
 
@@ -50,7 +60,7 @@ loader = dataLoader.trainDataLoader()
 full_dataset = loader.getDataset3()
 #full_dataset = full_dataset.shuffle(2)
 
-checkPointFolder = './Checkpoints1/'
+checkPointFolder = './Checkpoints2/'
 if train_mode:
 
   full_dataset = full_dataset.batch(batch_size)
@@ -85,12 +95,12 @@ else:
   model.load_weights(checkPointFolder+"cp.ckpt")
 
 
-testFilePath = "./test1"
+testFilePath = "./test2"
 useFormerTest = True
 f1 = testFilePath+"/testResult_a.pb"
 f2 = testFilePath+"/testResult_b.pb"
 f3 = testFilePath+"/testResult_t.pb"
-selectDataCount = 3
+selectDataCount = 3  #1 3
 
 
 if useFormerTest:
@@ -102,7 +112,6 @@ if useFormerTest:
     next(itrd)
   x,y = next(itrd)
   testx = np.copy(x.numpy()[0, :, :])
-  #print(testx[:10])
   testStart = y.numpy()[0,0,:]
   testPre = y.numpy()[0,1:,:]
   testPre = testPre.reshape((1,max_target_len - 1,63))
@@ -113,8 +122,17 @@ if useFormerTest:
   with open(f1, 'wb') as pickle_file:
     #initalPos = testResult.numpy()[0,0,:]
     #results = testResult.numpy()[0, :, :] / 5.0 +initalPos
-    results = testResult.numpy()[0, :, :] * loader.delta_std  + loader.delta_mean +initalPos
-    dataList = pickle.dump([np.concatenate((firstFrame, results), axis=0), testx], pickle_file)
+    #results = testResult.numpy()[0, :, :] * loader.delta_std  + loader.delta_mean +initalPos
+
+    #results = testResult.numpy()[0, :, :] * loader.ppl_std  + loader.ppl_mean
+    results = testResult.numpy()[0, :, :]
+    results /= 5.0 
+    results = results.reshape((129,21,3))
+    for i in range(20):
+      results[:, 1+i] = results[:, 1+i] + results[:, 0]
+    print(results.shape)
+    #dataList = pickle.dump([np.concatenate((firstFrame, results), axis=0), testx], pickle_file)
+    dataList = pickle.dump([results, testx], pickle_file)
   '''
   with open(f2, 'wb') as pickle_file:
     #initalPos = testResult.numpy()[0,0,:]
@@ -144,11 +162,26 @@ if useFormerTest:
   with open(f2, 'wb') as pickle_file:
     initalPos = testResult.numpy()[0,0,:]
     #dataList = pickle.dump([testResult.numpy()[0, 1:, :] / 5.0 +initalPos, testx], pickle_file)
-    dataList = pickle.dump([testResult.numpy()[0, 1:, :] * loader.delta_std + loader.delta_mean +initalPos, testx], pickle_file)
+    #dataList = pickle.dump([testResult.numpy()[0, 1:, :] * loader.delta_std + loader.delta_mean +initalPos, testx], pickle_file)
+    
+    #results = testResult.numpy()[0, :, :] * loader.ppl_std  + loader.ppl_mean
+    results = testResult.numpy()[0, :, :]
+    results /= 5.0 
+    results = results.reshape((129,21,3))
+    for i in range(20):
+      results[:, 1+i] = results[:, 1+i] + results[:, 0]
+    dataList = pickle.dump([results, testx], pickle_file)
   print(testx.shape)
   with open(f3, 'wb') as pickle_file:
     initalPos = testResult.numpy()[0,0,:]
     #dataList = pickle.dump([testPreSave[0, :, :] / 5.0 +initalPos, testx], pickle_file)
-    dataList = pickle.dump([testPreSave[0, :, :] * loader.delta_std + loader.delta_mean +initalPos, testx], pickle_file)
+    #dataList = pickle.dump([testPreSave[0, :, :] * loader.delta_std + loader.delta_mean +initalPos, testx], pickle_file)
+    #results = testPreSave[0, :, :] * loader.ppl_std  + loader.ppl_mean
+    results = testPreSave / 5.0
+    results = results.reshape((129,21,3))
+    for i in range(20):
+      results[:, 1+i] += results[:, 0]
+    #print(results[:, 0])
+    dataList = pickle.dump([results, testx], pickle_file)
 
 print("job finished")

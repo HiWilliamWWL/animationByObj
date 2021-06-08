@@ -11,6 +11,9 @@ startEnd = {"t1":[180,360], "t2":[30, 320], "t3":[180, 350], "t4":[60, 260], "t5
             "n13":[60, 200], "n14":[50, 180], "n15":[60, 190], "n16":[60, 160], "n17":[100, 240], "n18":[70, 270],
             "n19":[90, 260], "n20":[70, 280], "n21":[80, 260], "n22":[80, 240], "n23":[90, 280]}
 
+humanDimension = 63
+objDimention = 36
+
 class trainDataLoader:
     def __init__(self):
         self.skeletonData = []
@@ -20,20 +23,29 @@ class trainDataLoader:
         self.obj_data = []
         self.skeleton_data = []
         self.loadFromFile()
-        self.pos_mean = 0.0
-        self.delta_mean = 0.0
-        self.pos_std = 0.0
-        self.delta_std = 0.0
+        self.obj_mean = 0.0
+        self.ppl_mean = 0.0
+        self.obj_std = 0.0
+        self.ppl_std = 0.0
         self.prepared = False
+        self.pose_mean = None
+        self.pose_cov_inv = None
         
     def updateNorm(self):
-        temp_pos = np.array(self.obj_data).flatten()
-        temp_pos = np.concatenate((temp_pos, np.array(self.skeleton_data)[:, 0, :].flatten()))
-        self.pos_mean = np.mean(temp_pos)
-        self.pos_std = np.std(temp_pos)
-        temp_delta = np.array(self.skeleton_data)[:, 1:, :].flatten()
-        self.delta_mean = np.mean(temp_delta)
-        self.delta_std = np.std(temp_delta)
+        temp_obj = np.array(self.obj_data).flatten()
+        #temp_pos = np.concatenate((temp_pos, np.array(self.skeleton_data)[:, 0, :].flatten()))
+        self.obj_mean = np.mean(temp_obj)
+        self.obj_std = np.std(temp_obj)
+
+        temp_ppl = np.array(self.skeleton_data).flatten()
+        self.ppl_mean = np.mean(temp_ppl)
+        self.ppl_std = np.std(temp_ppl)
+
+        ppl_array = np.array(self.skeleton_data)
+        ppl_array = (ppl_array - self.ppl_mean) / self.ppl_std
+        self.pose_mean = ppl_array[:,:,3:].mean(axis=(0,1))
+        pose_cov = np.cov(ppl_array[:,:,3:].reshape((-1,60)).T)
+        self.pose_cov_inv = np.linalg.inv(pose_cov)
         
     
     def loadFromFile(self, pathName = "./liftOnly/*.data"):
@@ -54,20 +66,27 @@ class trainDataLoader:
                 rigidPos = []
                 markerPos = []
                 for i in range(start, end, step):
-                    bodyCenter = np.array(dataList[0][i][:3])
-                    #bodyCenter = np.array(dataList[0][0][:3])
+                    #bodyCenter = np.array(dataList[0][i][:3])
+                    worldCenter = np.array(dataList[0][0][:3])
+                    bodyCenter = np.array(dataList[0][i][:3]) - worldCenter
+                    #centerDistant = np.array(dataList[0][i][:3]) - bodyCenter
 
-                    bodyWhole = np.array(dataList[0][i]).reshape((21,3)) - bodyCenter
-                    bodyWhole = bodyWhole.reshape((63))
+                    bodyWhole = np.array(dataList[0][i][:]).reshape((21,3))- worldCenter
+
+                    bodyWhole[1:, :] -= bodyCenter
+
+                    #bodyWhole = np.concatenate((centerDistant.reshape((1,3)), bodyWhole), axis=0)
+
+                    bodyWhole = bodyWhole.reshape((humanDimension))
                     bodyData.append(bodyWhole)
                     
-                    objPos = np.array(dataList[2][i][:3]) - bodyCenter
+                    objPos = np.array(dataList[2][i][:3]) - worldCenter
                     objPos = objPos.tolist()
                     objRot = R.from_quat(dataList[2][i][3:])
                     objRot = objRot.as_euler("xyz").tolist()
                     rigidPos.append(np.array(objPos+objRot))
 
-                    objMarkers = np.array(dataList[3][i]) - bodyCenter
+                    objMarkers = np.array(dataList[3][i]) - worldCenter
                     markerPos.append(objMarkers.reshape((12*3)))
 
                 self.skeletonData.append(np.array(bodyData))
@@ -127,6 +146,7 @@ class trainDataLoader:
             inital_pos = np.array(skeletonPart[file_count][0]).astype(dt)
             delta_pos = (np.array(skeletonPart[file_count][1:]).astype(dt) - inital_pos) * 5.0
             pos_whole = np.concatenate((np.array(skeletonPart[file_count][0]).reshape((1,63)), delta_pos), axis=0).astype(dt)
+
             obj_whole = np.array(objPart[file_count][:]).astype(dt)
 
             pos_zeros[:pos_whole.shape[0],:pos_whole.shape[1]] = pos_whole
@@ -147,11 +167,12 @@ class trainDataLoader:
         max_length = 130
 
         for file_count in range(len(self.skeletonData)):
-            pos_zeros = np.zeros((max_length, 63))
-            obj_zeros = np.zeros((max_length, 36))
-            inital_pos = np.array(skeletonPart[file_count][0]).astype(dt)
-            delta_pos = (np.array(skeletonPart[file_count][1:]).astype(dt) - inital_pos)
-            pos_whole = np.concatenate((np.array(skeletonPart[file_count][0]).reshape((1,63)), delta_pos), axis=0).astype(dt)
+            pos_zeros = np.zeros((max_length, humanDimension))
+            obj_zeros = np.zeros((max_length, objDimention))
+            #inital_pos = np.array(skeletonPart[file_count][0]).astype(dt)
+            #delta_pos = (np.array(skeletonPart[file_count][1:]).astype(dt) - inital_pos)
+            #pos_whole = np.concatenate((np.array(skeletonPart[file_count][0]).reshape((1,63)), delta_pos), axis=0).astype(dt)
+            pos_whole = np.array(skeletonPart[file_count][:]).astype(dt)
             
             obj_whole = np.array(objPart[file_count][:]).astype(dt)
 
@@ -164,8 +185,8 @@ class trainDataLoader:
         for i in range(len(self.obj_data)):
             #self.obj_data[i] = (self.obj_data[i] - self.pos_mean) / self.pos_std
             #self.skeleton_data[i][0, :] = (self.skeleton_data[i][0, :] - self.pos_mean) / self.pos_std
-            self.skeleton_data[i][1:, :] = (self.skeleton_data[i][1:, :] - self.delta_mean) / ( self.delta_std)
-            #self.skeleton_data[i][1:, :] *= 5.0
+            #self.skeleton_data[i] = (self.skeleton_data[i] - self.ppl_mean) / ( self.ppl_std)
+            self.skeleton_data[i] *= 5.0
     
     def getDataset3(self):
         if not self.prepared:

@@ -15,6 +15,7 @@ objName = "tripod"
 
 #fileName = "testResult.pb"
 testFilePath = "./test1/"
+print(testFilePath)
 fileName = testFilePath + "testResult_a.pb"
 if len(sys.argv) == 3:
     fileName = testFilePath+"testResult_t.pb"
