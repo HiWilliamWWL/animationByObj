@@ -185,8 +185,8 @@ class trainDataLoader:
         for i in range(len(self.obj_data)):
             #self.obj_data[i] = (self.obj_data[i] - self.pos_mean) / self.pos_std
             #self.skeleton_data[i][0, :] = (self.skeleton_data[i][0, :] - self.pos_mean) / self.pos_std
-            self.skeleton_data[i] = (self.skeleton_data[i] - self.ppl_mean) / ( self.ppl_std)
-            #self.skeleton_data[i] *= 5.0
+            #self.skeleton_data[i] = (self.skeleton_data[i] - self.ppl_mean) / ( self.ppl_std)
+            self.skeleton_data[i] *= 5.0
             #print(self.skeleton_data[i][:5])
         #exit()
     

@@ -14,7 +14,7 @@ import sys
 objName = "tripod"
 
 #fileName = "testResult.pb"
-testFilePath = "./test2/"
+testFilePath = "./test3/"
 print(testFilePath)
 fileName = testFilePath + "testResult_a.pb"
 if len(sys.argv) == 3:

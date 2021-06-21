@@ -59,7 +59,7 @@ loader = dataLoader.trainDataLoader()
 full_dataset = loader.getDataset3()
 #full_dataset = full_dataset.shuffle(2)
 
-checkPointFolder = './Checkpoints2/'
+checkPointFolder = './Checkpoints3/'
 if train_mode:
 
   full_dataset = full_dataset.batch(batch_size)
@@ -94,12 +94,12 @@ else:
   model.load_weights(checkPointFolder+"cp.ckpt")
 
 
-testFilePath = "./test1"
+testFilePath = "./test3"
 useFormerTest = True
 f1 = testFilePath+"/testResult_a.pb"
 f2 = testFilePath+"/testResult_b.pb"
 f3 = testFilePath+"/testResult_t.pb"
-selectDataCount = 2  #1 3
+selectDataCount = 3  #1 3
 
 
 if useFormerTest:
@@ -124,9 +124,10 @@ if useFormerTest:
     #results = testResult.numpy()[0, :, :] * loader.delta_std  + loader.delta_mean +initalPos
 
     #results = testResult.numpy()[0, :, :] * loader.ppl_std  + loader.ppl_mean
+
     results = testResult.numpy()[0, :, :]
-    results = results * loader.ppl_std  + loader.ppl_mean
-    #results /= 5.0 
+    #results = results * loader.ppl_std  + loader.ppl_mean
+    results /= 5.0 
     results = results.reshape((max_target_len-1,21,3))
     print(results[:30, 0])
     print(results.shape)
@@ -167,8 +168,8 @@ if useFormerTest:
     #dataList = pickle.dump([testResult.numpy()[0, 1:, :] * loader.delta_std + loader.delta_mean +initalPos, testx], pickle_file)
     
     #results = testResult.numpy()[0, :, :] * loader.ppl_std  + loader.ppl_mean
-    results = testResult.numpy()[0, :, :]
-    #results /= 5.0 
+    #results = testResult.numpy()[0, :, :]
+    results /= 5.0 
     results = results * loader.ppl_std  + loader.ppl_mean
     results = results.reshape((max_target_len-1,21,3))
     for i in range(20):

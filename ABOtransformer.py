@@ -227,11 +227,11 @@ class TransformerDecoder(layers.Layer):
     batch_size = input_shape[0]
     seq_len = input_shape[1]
     #tf.print(seq_len)
-    #causal_mask = self.causal_attention_mask(batch_size, seq_len, seq_len, tf.bool)
+    causal_mask = self.causal_attention_mask(batch_size, seq_len, seq_len, tf.bool)
     #tf.print(causal_mask.shape)
     #print(target.shape)
     #exit()
-    causal_mask = self.maskGenerate2(target, seq_len)
+    #causal_mask = self.maskGenerate2(target, seq_len)
     
     target_att = self.self_att(target, target, attention_mask=causal_mask)
     target_norm = self.layernorm1(target + self.self_dropout(target_att))
