@@ -9,9 +9,9 @@ import numpy as np
 import pickle
 import ABOtransformer
 
-train_mode = False
+train_mode = True
 
-max_target_len = 130
+max_target_len = 85 #130
 '''
 model = ABOtransformer.Transformer(
     num_hid=128,
@@ -23,33 +23,32 @@ model = ABOtransformer.Transformer(
     num_layers_dec=3,
     num_classes=63,
 )
+
+model = ABOtransformer.Transformer_newScheduleSampling(
+    num_hid=128,
+    num_head=8,
+    num_feed_forward=128, #128
+    source_maxlen=max_target_len,
+    target_maxlen=max_target_len,
+    num_layers_enc=4, #4
+    num_layers_dec=3, #3
+    num_classes=63
+)
 '''
 model = ABOtransformer.Transformer_newScheduleSampling(
     num_hid=128,
-    num_head=4,
+    num_head=8,
     num_feed_forward=128,
     source_maxlen=max_target_len,
     target_maxlen=max_target_len,
     num_layers_enc=4,
-    num_layers_dec=2,
+    num_layers_dec=3,
     num_classes=63,
 )
-'''
-model = ABOtransformer.Transformer_pre2pre(
-    num_hid=128,
-    num_head=4,
-    num_feed_forward=128,
-    source_maxlen=max_target_len,
-    target_maxlen=max_target_len,
-    num_layers_enc=4,
-    num_layers_dec=2,
-    num_classes=63,
-)
-'''
+
 
 batch_size = ABOtransformer.batch_size
 epoch_num = 50
-
 
 optimizer = keras.optimizers.Adam(0.001)
 #model.compile(optimizer=optimizer, loss="mse", metrics="mse")
@@ -64,8 +63,8 @@ checkPointFolder = './Checkpoints2/'
 if train_mode:
 
   full_dataset = full_dataset.batch(batch_size)
-  val_dataset = full_dataset.take(6) 
-  train_dataset = full_dataset.skip(6)
+  val_dataset = full_dataset.take(4) 
+  train_dataset = full_dataset.skip(4)
   if not os.path.exists(checkPointFolder):
     os.makedirs(checkPointFolder)
   if not os.path.exists(checkPointFolder):
@@ -95,12 +94,12 @@ else:
   model.load_weights(checkPointFolder+"cp.ckpt")
 
 
-testFilePath = "./test2"
+testFilePath = "./test1"
 useFormerTest = True
 f1 = testFilePath+"/testResult_a.pb"
 f2 = testFilePath+"/testResult_b.pb"
 f3 = testFilePath+"/testResult_t.pb"
-selectDataCount = 3  #1 3
+selectDataCount = 2  #1 3
 
 
 if useFormerTest:
@@ -126,11 +125,14 @@ if useFormerTest:
 
     #results = testResult.numpy()[0, :, :] * loader.ppl_std  + loader.ppl_mean
     results = testResult.numpy()[0, :, :]
-    results /= 5.0 
-    results = results.reshape((129,21,3))
+    results = results * loader.ppl_std  + loader.ppl_mean
+    #results /= 5.0 
+    results = results.reshape((max_target_len-1,21,3))
+    print(results[:30, 0])
+    print(results.shape)
     for i in range(20):
       results[:, 1+i] = results[:, 1+i] + results[:, 0]
-    print(results.shape)
+    
     #dataList = pickle.dump([np.concatenate((firstFrame, results), axis=0), testx], pickle_file)
     dataList = pickle.dump([results, testx], pickle_file)
   '''
@@ -166,8 +168,9 @@ if useFormerTest:
     
     #results = testResult.numpy()[0, :, :] * loader.ppl_std  + loader.ppl_mean
     results = testResult.numpy()[0, :, :]
-    results /= 5.0 
-    results = results.reshape((129,21,3))
+    #results /= 5.0 
+    results = results * loader.ppl_std  + loader.ppl_mean
+    results = results.reshape((max_target_len-1,21,3))
     for i in range(20):
       results[:, 1+i] = results[:, 1+i] + results[:, 0]
     dataList = pickle.dump([results, testx], pickle_file)
@@ -177,8 +180,9 @@ if useFormerTest:
     #dataList = pickle.dump([testPreSave[0, :, :] / 5.0 +initalPos, testx], pickle_file)
     #dataList = pickle.dump([testPreSave[0, :, :] * loader.delta_std + loader.delta_mean +initalPos, testx], pickle_file)
     #results = testPreSave[0, :, :] * loader.ppl_std  + loader.ppl_mean
-    results = testPreSave / 5.0
-    results = results.reshape((129,21,3))
+    #results = testPreSave / 5.0
+    results = testPreSave * loader.ppl_std  + loader.ppl_mean
+    results = results.reshape((max_target_len-1,21,3))
     for i in range(20):
       results[:, 1+i] += results[:, 0]
     #print(results[:, 0])

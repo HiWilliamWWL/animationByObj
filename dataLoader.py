@@ -61,7 +61,7 @@ class trainDataLoader:
                         start = startEnd[k][0]
                         end = startEnd[k][1]
                 #step = (end - start) // 50 - 1
-                step = 2
+                step = 3
                 bodyData = []
                 rigidPos = []
                 markerPos = []
@@ -164,7 +164,7 @@ class trainDataLoader:
         dt = np.float32
         objPart = self.objectMarkerData
 
-        max_length = 130
+        max_length = 85  #130
 
         for file_count in range(len(self.skeletonData)):
             pos_zeros = np.zeros((max_length, humanDimension))
@@ -185,8 +185,10 @@ class trainDataLoader:
         for i in range(len(self.obj_data)):
             #self.obj_data[i] = (self.obj_data[i] - self.pos_mean) / self.pos_std
             #self.skeleton_data[i][0, :] = (self.skeleton_data[i][0, :] - self.pos_mean) / self.pos_std
-            #self.skeleton_data[i] = (self.skeleton_data[i] - self.ppl_mean) / ( self.ppl_std)
-            self.skeleton_data[i] *= 5.0
+            self.skeleton_data[i] = (self.skeleton_data[i] - self.ppl_mean) / ( self.ppl_std)
+            #self.skeleton_data[i] *= 5.0
+            #print(self.skeleton_data[i][:5])
+        #exit()
     
     def getDataset3(self):
         if not self.prepared:
