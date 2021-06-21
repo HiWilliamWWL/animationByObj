@@ -505,6 +505,11 @@ class Transformer_pre2pre(Transformer):
     #return {"loss": self.loss_metric.result()}
     return {m.name: m.result() for m in self.metrics}
 
+
+
+
+
+
 class Transformer_newScheduleSampling(Transformer):
   def __init__(
         self, num_hid=64, num_head=2, num_feed_forward=128, source_maxlen=60, target_maxlen=60, num_layers_enc=4, num_layers_dec=1, num_classes=10):
@@ -535,7 +540,18 @@ class Transformer_newScheduleSampling(Transformer):
       #with tf.GradientTape() as tape:
       y_pred2 = self([source, new_input], training=True)
       loss2 = self.compiled_loss(y, y_pred2)
-      loss = loss1+loss2
+
+      """
+      -- Jun 21, 23:34
+      I think you need to read again the paper Sceduled Samping for Transformers (https://arxiv.org/abs/1906.07651)
+      In that paper and in the earlier paper by Bengio et al., 2015, 
+      the GT history and the prediction of the first decoder are mixed according to some kind of scheduled plan
+      
+      Averaging loss1 and loss2 is too simple, I guess. 
+      So, you need to re-implement that algorithm described in paper Sceduled Samping for Transformers
+      to fully understand if the problem is actually caused by the model exposured to the GT history.
+      """
+      loss = loss1 + loss2
       #loss = loss2
     trainable_vars = self.trainable_variables
     gradients = tape.gradient(loss, trainable_vars)

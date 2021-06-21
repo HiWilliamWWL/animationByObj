@@ -1,2 +1,4 @@
 *.pb
-__pycache__
+__pycache_
+*.zip
+liftOnly85

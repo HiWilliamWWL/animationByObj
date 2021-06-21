@@ -48,9 +48,9 @@ model = ABOtransformer.Transformer_newScheduleSampling(
 
 
 batch_size = ABOtransformer.batch_size
-epoch_num = 50
+epoch_num = 500
 
-optimizer = keras.optimizers.Adam(0.001)
+optimizer = keras.optimizers.Adam(0.0001)
 #model.compile(optimizer=optimizer, loss="mse", metrics="mse")
 model.compile(optimizer=optimizer, loss=ABOtransformer.maskLabelLoss, metrics=ABOtransformer.maskLabelLoss)
 
