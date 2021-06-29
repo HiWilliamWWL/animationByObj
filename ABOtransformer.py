@@ -12,10 +12,13 @@ def maskLabelLoss(yTrue, yPred):
   #hand 8,12 base-0
   print("enter loss")
   obj_center = None
+  obj_center_allSeq = None
   in_train = False
   add_hand = True
+  final_frame_hand = False
   if yTrue.shape[2] > 63:
     obj_center = yTrue[:, -1, -3:]
+    obj_center_allSeq = yTrue[:, :, -3:]
     yTrue = yTrue[:, :, :-3]
     in_train = True
   zerosPattern = tf.zeros_like(yPred[:,:,0])
@@ -38,26 +41,51 @@ def maskLabelLoss(yTrue, yPred):
 
   handLoss = 0.0
   if in_train and add_hand:
-    for i in range(batch_size):
-      lastFrame = tf.cast( tf.reduce_sum(tf.cast(mask2[i], tf.float32)), tf.int32)
-      handPos1 = yPred[i, lastFrame-2, 8*3:8*3+3]
-      handPos1 += yPred[i, lastFrame-2, :3]
-      #handPos1 /= 5.0 #norm
-      handPos1 = handPos1 * loader.ppl_std  + loader.ppl_mean
-      
-      diss1 = tf.math.sqrt(tf.reduce_sum((handPos1 - obj_center[i])**2))
-      if diss1 > 0.5:
-        handLoss += diss1 * 1.5
-      handPos2 = yPred[i, lastFrame-2, 12*3:12*3+3]
-      handPos2 += yPred[i, lastFrame-2, :3]
-      #handPos2 /= 5.0 #norm
-      handPos1 = handPos1 * loader.ppl_std  + loader.ppl_mean
+    if final_frame_hand:
+      for i in range(batch_size):
+        lastFrame = tf.cast( tf.reduce_sum(tf.cast(mask2[i], tf.float32)), tf.int32)
+        handPos1 = yPred[i, lastFrame-2, 8*3:8*3+3]
+        handPos1 += yPred[i, lastFrame-2, :3]
+        #handPos1 /= 5.0 #norm
+        handPos1 = handPos1 * loader.ppl_std  + loader.ppl_mean
+        
+        diss1 = tf.math.sqrt(tf.reduce_sum((handPos1 - obj_center[i])**2))
+        if diss1 > 0.2:
+          handLoss += diss1 * 1.5
+        handPos2 = yPred[i, lastFrame-2, 12*3:12*3+3]
+        handPos2 += yPred[i, lastFrame-2, :3]
+        #handPos2 /= 5.0 #norm
+        handPos1 = handPos1 * loader.ppl_std  + loader.ppl_mean
 
-      diss2 = tf.math.sqrt(tf.reduce_sum((handPos2 - obj_center[i])**2))
-      #tf.print(handPos1)
-      #tf.print(obj_center[i])
-      if diss2 > 0.3:
-        handLoss += diss2 * 1.5
+        diss2 = tf.math.sqrt(tf.reduce_sum((handPos2 - obj_center[i])**2))
+        #tf.print(handPos1)
+        #tf.print(obj_center[i])
+        if diss2 > 0.2:
+          handLoss += diss2 * 1.5
+    else:
+      for i in range(batch_size):
+        handPos1 = yPred[i, :, 8*3:8*3+3]
+        handPos1 += yPred[i, :, :3]
+        #handPos1 /= 5.0 #norm
+        handPos1 = handPos1 * loader.ppl_std  + loader.ppl_mean
+        
+        diss1 = tf.math.sqrt(tf.reduce_sum((handPos1 - obj_center_allSeq[i])**2, axis = -1))
+        diss1 = tf.boolean_mask(diss1, mask2[i])
+        dissZero = tf.zeros_like(diss1)
+        diss1 = tf.where(diss1 > 0.1, diss1*1.5, dissZero)
+        handLoss += tf.reduce_sum(diss1)
+
+        handPos2 = yPred[i, :, 12*3:12*3+3]
+        handPos2 += yPred[i, :, :3]
+        #handPos2 /= 5.0 #norm
+        handPos2 = handPos2 * loader.ppl_std  + loader.ppl_mean
+
+        diss2 = tf.math.sqrt(tf.reduce_sum((handPos2 - obj_center_allSeq[i])**2, axis = -1))
+        diss2 = tf.boolean_mask(diss2, mask2[i])
+        dissZero = tf.zeros_like(diss2)
+        diss2 = tf.where(diss2 > 0.1, diss2*1.5, dissZero)
+        handLoss += tf.reduce_sum(diss2)
+
     
   '''
   poseMean = 0.0
@@ -82,14 +110,14 @@ def maskLabelLoss(yTrue, yPred):
     partThis = tf.transpose(partThis, perm=[1, 0])
     part2 = tf.tensordot(part1, partThis, axes=1)
     poseMean += tf.sqrt(part2)
-  if poseMean < 500:
+  if poseMean < 300:
     poseMean = 0.0
-  tf.print()
-  tf.print(poseMean * 0.00005)
-  tf.print(handLoss * 0.05)
-  tf.print(mes)
+  #tf.print("hand loss")
+  #tf.print(poseMean * 0.00005)
+  #tf.print(handLoss * 0.001)
+  #tf.print(mes)
   
-  return poseMean * 0.00005+mes+handLoss * 0.1
+  return poseMean * 0.0001+mes+handLoss * 0.01
   #return mes+handLoss * 0.1
   #return mes
 
@@ -97,7 +125,7 @@ def maskMSE(yTrue, yPred):
   if yTrue.shape[2] > 63:
     yTrue = yTrue[:, :, :-3]
   zerosPattern = tf.zeros_like(yPred)
-  mask = tf.math.abs(yTrue) > zerosPattern
+  mask = tf.cast(tf.math.abs(yTrue), tf.float32) > tf.cast(zerosPattern, tf.float32)
   
   yTrue_m = tf.boolean_mask(yTrue, mask)
   yPred_m = tf.boolean_mask(yPred, mask)
@@ -111,15 +139,29 @@ class TokenEmbeddingObj(layers.Layer):
     self.denseEmb2 = tf.keras.layers.Dense(64)
     self.denseEmb3 = tf.keras.layers.Dense(num_hid)
     self.pos_emb = layers.Embedding(input_dim=maxlen, output_dim=num_hid)
+    self.num_hid = num_hid
 
   def call(self, x):
     maxlen = x.shape[-2]
     x = self.denseEmb1(x)
     x = self.denseEmb2(x)
     x = self.denseEmb3(x)
-    positions = tf.range(start=0, limit=maxlen, delta=1)
-    positions = self.pos_emb(positions)
-    result = x + positions
+
+    pe = tf.zeros((maxlen, self.num_hid))
+    position = tf.range(start=0, limit=maxlen)
+    position = tf.cast(position, tf.float32)
+    div_term = tf.exp(tf.cast(tf.range(0, self.num_hid), tf.float32) * -(tf.math.log(10000.0) / self.num_hid))
+    pe1 = tf.math.sin(tf.reshape(position,( maxlen, 1)) * tf.reshape( div_term, (1, self.num_hid)))
+    pe2 = tf.math.cos(tf.reshape(position,( maxlen, 1)) * tf.reshape( div_term, (1, self.num_hid)))
+    pattern1 = tf.convert_to_tensor(np.array([[1.0, 0.0] for i in range(self.num_hid//2)]).flatten(), dtype=tf.float32)
+    pattern2 = tf.convert_to_tensor(np.array([[0.0, 1.0] for i in range(self.num_hid//2)]).flatten(), dtype=tf.float32)
+    pe = pattern1 * pe1 + pattern2*pe2
+    pe = tf.expand_dims(pe, 0)
+    pe = tf.tile(pe,(batch_size, 1, 1))
+
+    #positions = tf.range(start=0, limit=maxlen, delta=1)
+    #positions = self.pos_emb(positions)
+    result = x + pe
     return result
 
 class TokenEmbeddingPpl(layers.Layer):
@@ -128,15 +170,30 @@ class TokenEmbeddingPpl(layers.Layer):
     self.denseEmb1 = tf.keras.layers.Dense(128)
     self.denseEmb2 = tf.keras.layers.Dense(num_hid)
     self.pos_emb = layers.Embedding(input_dim=maxlen, output_dim=num_hid)
+    self.num_hid = num_hid
 
   def call(self, x):
     maxlen = x.shape[-2]
     x = self.denseEmb1(x)
     x = self.denseEmb2(x)
-    positions = tf.range(start=0, limit=maxlen, delta=1)
-    positions = self.pos_emb(positions)
-    result = x + positions
+    #positions = tf.range(start=0, limit=maxlen, delta=1)
+    #positions = self.pos_emb(positions)
+    #result = x + positions
     #result = x
+
+    pe = tf.zeros((maxlen, self.num_hid))
+    position = tf.range(start=0, limit=maxlen)
+    position = tf.cast(position, tf.float32)
+    div_term = tf.exp(tf.cast(tf.range(0, self.num_hid), tf.float32) * -(tf.math.log(10000.0) / self.num_hid))
+    pe1 = tf.math.sin(tf.reshape(position,( maxlen, 1)) * tf.reshape( div_term, (1, self.num_hid)))
+    pe2 = tf.math.cos(tf.reshape(position,( maxlen, 1)) * tf.reshape( div_term, (1, self.num_hid)))
+    pattern1 = tf.convert_to_tensor(np.array([[1.0, 0.0] for i in range(self.num_hid//2)]).flatten(), dtype=tf.float32)
+    pattern2 = tf.convert_to_tensor(np.array([[0.0, 1.0] for i in range(self.num_hid//2)]).flatten(), dtype=tf.float32)
+    pe = pattern1 * pe1 + pattern2*pe2
+    pe = tf.expand_dims(pe, 0)
+    pe = tf.tile(pe,(batch_size, 1, 1))
+
+    result = x + pe
     return result
 
 class TransformerEncoder(layers.Layer):
@@ -512,16 +569,41 @@ class Transformer_pre2pre(Transformer):
 
 class Transformer_newScheduleSampling(Transformer):
   def __init__(
-        self, num_hid=64, num_head=2, num_feed_forward=128, source_maxlen=60, target_maxlen=60, num_layers_enc=4, num_layers_dec=1, num_classes=10):
+        self, num_hid=64, num_head=2, num_feed_forward=128, source_maxlen=60, target_maxlen=60, num_layers_enc=4, num_layers_dec=1, num_classes=10, scheule_sampling_gt_rate = 80):
         super().__init__(num_hid, num_head, num_feed_forward, source_maxlen, target_maxlen, num_layers_enc, num_layers_dec, num_classes)
+        self.scheule_sampling_gt_rate = scheule_sampling_gt_rate
   
-  def getObjCenterInfo(self, batch_size, source):
+  def getObjCenterInfo_finalFrame(self, batch_size, source):
     obj_pos = tf.reshape(source, (batch_size, self.target_maxlen, 12,3))
     obj_final_pos = obj_pos[:, 0, :,:]
     obj_final_center = tf.reduce_mean(obj_final_pos, axis=-2)
     obj_final_center = tf.expand_dims(obj_final_center, axis=1)
     obj_final_center = tf.tile(obj_final_center, (1,self.target_maxlen-1,1))
     return obj_final_center
+  
+  def getObjCenterInfo(self, batch_size, source):
+    obj_pos = tf.reshape(source, (batch_size, self.target_maxlen, 12,3))
+    obj_center = tf.reduce_mean(obj_pos, axis=-2)
+    #obj_final_center = tf.expand_dims(obj_final_center, axis=1)
+    #obj_final_center = tf.tile(obj_final_center, (1,self.target_maxlen-1,1))
+    return obj_center[:, 1:, :]
+
+  def mix_Data(self, dec_input, pre_input, gt_percent):
+    resultShape = [batch_size * (self.target_maxlen-1) * self.num_classes // 3]
+    randomChoice = tf.random.uniform(shape=resultShape, maxval=100.0)
+    randomChoice = randomChoice < gt_percent
+    randomChoice = tf.reshape(randomChoice, (batch_size, (self.target_maxlen-1), self.num_classes // 3, 1))
+    randomChoice = tf.tile(randomChoice, [1,1,1,3])
+    randomChoice = tf.reshape(randomChoice, (batch_size, (self.target_maxlen-1), self.num_classes))
+    not_randomChoice = tf.math.logical_not(randomChoice)
+    randomChoice = tf.cast(randomChoice, tf.dtypes.float32)
+    not_randomChoice = tf.cast(not_randomChoice, tf.dtypes.float32)
+    #tf.print(not_randomChoice)
+    result = tf.zeros_like(dec_input)
+    result = result + randomChoice * dec_input + not_randomChoice * pre_input
+    return result
+
+
 
   def train_step(self, batch):
     """Gt2Pre works well with mean pose loss"""
@@ -533,11 +615,12 @@ class Transformer_newScheduleSampling(Transformer):
     y = dec_target
     obj_center = self.getObjCenterInfo(batch_size, source)
     y = tf.concat((y, obj_center), axis = -1)
+    #with tf.GradientTape() as tape:
+    y_pred1 = self([source, dec_input], training=True)
+    #loss1 = self.compiled_loss(y, y_pred1)
+    new_input = tf.concat((tf.expand_dims(dec_input[:,0,:], axis=1), y_pred1[:,:-1,:]), axis=1)
+    new_input = self.mix_Data(dec_input, new_input, self.scheule_sampling_gt_rate)
     with tf.GradientTape() as tape:
-      y_pred1 = self([source, dec_input], training=True)
-      loss1 = self.compiled_loss(y, y_pred1)
-      new_input = tf.concat((tf.expand_dims(dec_input[:,0,:], axis=1), y_pred1[:,:-1,:]), axis=1)
-      #with tf.GradientTape() as tape:
       y_pred2 = self([source, new_input], training=True)
       loss2 = self.compiled_loss(y, y_pred2)
 
@@ -551,8 +634,8 @@ class Transformer_newScheduleSampling(Transformer):
       So, you need to re-implement that algorithm described in paper Sceduled Samping for Transformers
       to fully understand if the problem is actually caused by the model exposured to the GT history.
       """
-      loss = loss1 + loss2
-      #loss = loss2
+      #loss = loss1 + loss2
+      loss = loss2
     trainable_vars = self.trainable_variables
     gradients = tape.gradient(loss, trainable_vars)
     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
@@ -562,6 +645,7 @@ class Transformer_newScheduleSampling(Transformer):
     return {m.name: m.result() for m in self.metrics}
     
   def test_step2(self, batch):
+    global batch_size
     x, y = batch
     source = x
     target = y
@@ -569,6 +653,8 @@ class Transformer_newScheduleSampling(Transformer):
     dec_target = target[:, 1:]
 
     preds = self([source, dec_input])
-    loss = self.compiled_loss(dec_target, y_pred=preds)
-    print(loss)
+
+    metric = maskMSE(dec_target, preds)
+    print("-------metrics-------------")
+    print(metric)
     return preds

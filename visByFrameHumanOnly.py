@@ -14,7 +14,7 @@ import sys
 objName = "tripod"
 
 #fileName = "testResult.pb"
-testFilePath = "./test3/"
+testFilePath = "./test5/"
 print(testFilePath)
 fileName = testFilePath + "testResult_a.pb"
 if len(sys.argv) == 3:
@@ -68,14 +68,15 @@ def relocateData(dataList, objPoint, startFrame = 0):
     for displayFrame in showRange:
         time.sleep(.01)
         z_points = bodyData[displayFrame, :, 2] * -1.0
-        x_points = bodyData[displayFrame, :, 0] 
+        x_points = bodyData[displayFrame, :, 0]
         y_points = bodyData[displayFrame, :, 1]
+        print(x_points)
         for connect in connections:
             a,b = connect
             ax.plot([x_points[a], x_points[b]],[y_points[a],y_points[b]],[z_points[a],z_points[b]], color="b")
         ax.scatter3D(x_points, y_points, z_points, color="r")
 
-        thisObjPoint = objPoint[1].reshape((12,3))
+        thisObjPoint = objPoint[displayFrame].reshape((12,3))
         z_points = thisObjPoint[ :, 2] * -1.0
         x_points = thisObjPoint[ :, 0] 
         y_points = thisObjPoint[ :, 1]
@@ -93,15 +94,16 @@ def relocateData(dataList, objPoint, startFrame = 0):
     #plt.cla()
     #plt.waitKey()
     print("end")
-    startFrame+= lenFrame - 1
-    #startFrame = 0
+    #startFrame+= lenFrame - 1
+    startFrame = 0
     ax = plt.axes(projection="3d")
     ax.yaxis.set_label_position("top")
     ax.view_init(elev=117., azim=-88.)
     #'''
-    z_points = bodyData[startFrame, :, 2]
+    z_points = bodyData[startFrame, :, 2] * -1.0
     x_points = bodyData[startFrame, :, 0]
     y_points = bodyData[startFrame, :, 1]
+    print(x_points)
     ax.scatter3D(x_points, y_points, z_points, color="r")
     #'''
     
@@ -111,7 +113,7 @@ def relocateData(dataList, objPoint, startFrame = 0):
     ax.plot([0.0, 0.0],[-0.7,1.2,],[0.0,0.0], color="b")
     ax.plot([-1.2,1.2],[0.0,0.0,],[0.0,0.0], color="r")
     ax.plot([0.0, 0.0],[0.0,0.0,],[-1.2,1.2], color="g")
-    thisObjPoint = objPoint[1].reshape((12,3))
+    thisObjPoint = objPoint[startFrame].reshape((12,3))
     z_points = thisObjPoint[ :, 2] * -1.0
     x_points = thisObjPoint[ :, 0] 
     y_points = thisObjPoint[ :, 1]
@@ -120,7 +122,7 @@ def relocateData(dataList, objPoint, startFrame = 0):
 
 with open(fileName, 'rb') as f:
     dataList,obj = pickle.load(f)
-    print(obj[:3])
+    #exit()
     '''
     for i in range(len(dataList[0])):
         if dataList[1][i] > 0:

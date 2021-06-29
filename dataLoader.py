@@ -5,11 +5,18 @@ import pickle
 from scipy.spatial.transform import Rotation as R
 
 #startEnd = {"t1":[220,360], "t2":[60, 320], "t3":[240, 350], "t4":[120, 260], "t5":[85, 230], "t6":[60, 270]}
-startEnd = {"t1":[180,360], "t2":[30, 320], "t3":[180, 350], "t4":[60, 260], "t5":[30, 230], "t6":[20, 270],
-            "n1":[50, 270], "n2":[100, 290], "n3":[80, 300], "n4":[130, 290], "n5":[75, 210], "n6":[100, 270],
-            "n7":[100, 280], "n8":[70, 280], "n9":[120, 300], "n10":[20, 115], "n11":[100, 230], "n12":[70, 230],
-            "n13":[60, 200], "n14":[50, 180], "n15":[60, 190], "n16":[60, 160], "n17":[100, 240], "n18":[70, 270],
-            "n19":[90, 260], "n20":[70, 280], "n21":[80, 260], "n22":[80, 240], "n23":[90, 280]}
+#startEnd = {"t1":[180,360], "t2":[30, 320], "t3":[180, 350], "t4":[60, 260], "t5":[30, 230], "t6":[20, 270],
+#            "n1":[50, 270], "n2":[100, 290], "n3":[80, 300], "n4":[130, 290], "n5":[75, 210], "n6":[100, 270],
+#            "n7":[100, 280], "n8":[70, 280], "n9":[120, 300], "n10":[20, 115], "n11":[100, 230], "n12":[70, 230],
+#            "n13":[60, 200], "n14":[50, 180], "n15":[60, 190], "n16":[60, 160], "n17":[100, 240], "n18":[70, 270],
+#            "n19":[90, 260], "n20":[70, 280], "n21":[80, 260], "n22":[80, 240], "n23":[90, 280]}
+
+startEnd = {"t1":[360], "t2":[320], "t3":[350], "t4":[260], "t5":[230], "t6":[270],
+            "n1":[270], "n2":[290], "n3":[300], "n4":[290], "n5":[210], "n6":[270],
+            "n7":[280], "n8":[280], "n9":[300], "n10":[115], "n11":[230], "n12":[230],
+            "n13":[200], "n14":[180], "n15":[190], "n16":[160], "n17":[240], "n18":[270],
+            "n19":[260], "n20":[280], "n21":[260], "n22":[240], "n23":[280]}
+
 
 humanDimension = 63
 objDimention = 36
@@ -59,21 +66,30 @@ class trainDataLoader:
                 for k in startEnd:
                     if k in f:
                         start = startEnd[k][0]
-                        end = startEnd[k][1]
+                        try:
+                            end = startEnd[k][1]
+                        except IndexError:
+                            end = start + 250
                 #step = (end - start) // 50 - 1
                 step = 3
                 bodyData = []
                 rigidPos = []
                 markerPos = []
                 for i in range(start, end, step):
+                    try:
                     #bodyCenter = np.array(dataList[0][i][:3])
-                    worldCenter = np.array(dataList[0][0][:3])
-                    bodyCenter = np.array(dataList[0][i][:3]) - worldCenter
-                    #centerDistant = np.array(dataList[0][i][:3]) - bodyCenter
+                        worldCenter = np.array(dataList[0][0][:3])
+                        bodyCenter = np.array(dataList[0][i][:3]) - worldCenter
+                        #centerDistant = np.array(dataList[0][i][:3]) - bodyCenter
 
-                    bodyWhole = np.array(dataList[0][i][:]).reshape((21,3))- worldCenter
+                        bodyWhole = np.array(dataList[0][i][:]).reshape((21,3))- worldCenter
 
-                    bodyWhole[1:, :] -= bodyCenter
+                        bodyWhole[1:, :] -= bodyCenter
+                    except IndexError:
+                        print(f)
+                        print("the length is "+ str(i))
+                        print()
+                        break
 
                     #bodyWhole = np.concatenate((centerDistant.reshape((1,3)), bodyWhole), axis=0)
 
@@ -185,8 +201,8 @@ class trainDataLoader:
         for i in range(len(self.obj_data)):
             #self.obj_data[i] = (self.obj_data[i] - self.pos_mean) / self.pos_std
             #self.skeleton_data[i][0, :] = (self.skeleton_data[i][0, :] - self.pos_mean) / self.pos_std
-            #self.skeleton_data[i] = (self.skeleton_data[i] - self.ppl_mean) / ( self.ppl_std)
-            self.skeleton_data[i] *= 5.0
+            self.skeleton_data[i] = (self.skeleton_data[i] - self.ppl_mean) / ( self.ppl_std)
+            #self.skeleton_data[i] *= 5.0
             #print(self.skeleton_data[i][:5])
         #exit()
     
