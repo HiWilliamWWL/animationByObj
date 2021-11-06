@@ -18,7 +18,6 @@ max_target_len = 85 #85  35
 
 batch_size = sbf.batch_size
 val_data_num = 4*3
-val_data_num_batch = 1
 optimizer = keras.optimizers.Adam(0.001)
 
 print("start loading data!!!")
@@ -28,8 +27,8 @@ import losses
 losses.loader = loader
 losses.batch_size = batch_size
 
-checkPointFolder = './Checkpoints/Checkpoints_sbf1/'
-model = sbf.SlidingBaseFc(num_hid=128, target_maxlen=max_target_len, num_classes=dataLoader.humanDimension2 + dataLoader.humanDimension1)
+checkPointFolder = './Checkpoints/Checkpoints_sbf2/'
+model = sbf.SlidingBaseFc(num_hid=128, target_maxlen=max_target_len, num_classes=dataLoader.humanDimension)
 model.compile(optimizer=optimizer, loss={"final_result": losses.maskLabelLoss_angles, "intial_human": losses.initialPoseLoss_angles},
   metrics={"final_result": losses.maskMSE_angles, "intial_human": losses.initialPoseLoss_angles})
 

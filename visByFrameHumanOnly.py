@@ -13,14 +13,28 @@ import sys
 #fileName = "./part1/tina_box2_l1s_b_003.data"
 objName = "tripod"
 
-#fileName = "testResult.pb"
-testFilePath = "./test5/"
+#testFilePath = "./test7/"
+#testFilePath = "./testB1/"
+
+#testFilePath = "./Tests/test_dis_1/"
+testFilePath = "./Tests/test_angles2/"
+
 print(testFilePath)
 fileName = testFilePath + "testResult_a.pb"
-if len(sys.argv) == 3:
+print(sys.argv)
+option = sys.argv[1]
+if option == 't':
     fileName = testFilePath+"testResult_t.pb"
-elif len(sys.argv) == 2:
-    fileName = testFilePath+"testResult_b.pb"
+elif option == 'g':
+    fileName = testFilePath+"testResult_g.pb"
+elif option == 'c':
+    fileName = testFilePath+"testResult_c.pb"
+elif option == 'r':
+    fileName = testFilePath+"testResult_r.pb"
+elif option == 'o':
+    fileName = testFilePath+"testResult_o.pb"
+elif option == 'p':
+    fileName = testFilePath+"testResult_p.pb"
 
 connections = [(0, 1), (1, 2), (2, 3), (3, 4), 
                              (2, 5), (5, 6), (6, 7), (7, 8), 
@@ -63,21 +77,21 @@ def relocateData(dataList, objPoint, startFrame = 0):
     fig.show()
     #plt.show()
     showRange = [ i for i in range(startFrame, lenFrame)]
-    showRange = [i for i in range(50)] + showRange
+    showRange = [i for i in range(20)] + showRange  #50
     restart = 0
     for displayFrame in showRange:
         time.sleep(.01)
-        z_points = bodyData[displayFrame, :, 2] * -1.0
+        z_points = bodyData[displayFrame, :, 2] #* -1.0
         x_points = bodyData[displayFrame, :, 0]
         y_points = bodyData[displayFrame, :, 1]
-        print(x_points)
+        #print(x_points)
         for connect in connections:
             a,b = connect
             ax.plot([x_points[a], x_points[b]],[y_points[a],y_points[b]],[z_points[a],z_points[b]], color="b")
         ax.scatter3D(x_points, y_points, z_points, color="r")
 
         thisObjPoint = objPoint[displayFrame].reshape((12,3))
-        z_points = thisObjPoint[ :, 2] * -1.0
+        z_points = thisObjPoint[ :, 2] #* -1.0
         x_points = thisObjPoint[ :, 0] 
         y_points = thisObjPoint[ :, 1]
         ax.scatter3D(x_points, y_points, z_points, color="g")
@@ -100,10 +114,10 @@ def relocateData(dataList, objPoint, startFrame = 0):
     ax.yaxis.set_label_position("top")
     ax.view_init(elev=117., azim=-88.)
     #'''
-    z_points = bodyData[startFrame, :, 2] * -1.0
+    z_points = bodyData[startFrame, :, 2] #* -1.0
     x_points = bodyData[startFrame, :, 0]
     y_points = bodyData[startFrame, :, 1]
-    print(x_points)
+    #print(x_points)
     ax.scatter3D(x_points, y_points, z_points, color="r")
     #'''
     

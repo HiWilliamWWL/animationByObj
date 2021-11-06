@@ -3,6 +3,7 @@ import numpy as np
 import glob
 import pickle
 from scipy.spatial.transform import Rotation as R
+import random
 
 #startEnd = {"t1":[220,360], "t2":[60, 320], "t3":[240, 350], "t4":[120, 260], "t5":[85, 230], "t6":[60, 270]}
 #startEnd = {"t1":[180,360], "t2":[30, 320], "t3":[180, 350], "t4":[60, 260], "t5":[30, 230], "t6":[20, 270],
@@ -21,6 +22,8 @@ startEnd = {"t1":[360], "t2":[320], "t3":[350], "t4":[260], "t5":[230], "t6":[27
 humanDimension = 63
 objDimention = 36
 
+
+
 class trainDataLoader:
     def __init__(self):
         self.skeletonData = []
@@ -37,6 +40,11 @@ class trainDataLoader:
         self.prepared = False
         self.pose_mean = None
         self.pose_cov_inv = None
+        self.pose_mean_init = None
+        self.pose_cov_inv_init = None
+
+        self.flipData = True
+        self.useRotation = True
         
     def updateNorm(self):
         temp_obj = np.array(self.obj_data).flatten()
@@ -50,15 +58,27 @@ class trainDataLoader:
 
         ppl_array = np.array(self.skeleton_data)
         ppl_array = (ppl_array - self.ppl_mean) / self.ppl_std
+        initialFrame = ppl_array[:,:10,3:].reshape((-1,60))
+
         self.pose_mean = ppl_array[:,:,3:].mean(axis=(0,1))
         pose_cov = np.cov(ppl_array[:,:,3:].reshape((-1,60)).T)
         self.pose_cov_inv = np.linalg.inv(pose_cov)
+        #self.pose_mean = ppl_array[:,:,3:].reshape((-1,3)).mean(axis=0)
+        #pose_cov = np.cov(ppl_array[:,:,3:].reshape((-1,3)).T)
+        #self.pose_cov_inv = np.linalg.inv(pose_cov)
+
+
+        self.pose_mean_init = initialFrame.mean(axis=0)
+        pose_cov_init = np.cov(initialFrame.reshape((-1,60)).T)
+        self.pose_cov_inv_init = np.linalg.inv(pose_cov_init) #* 1e-11
+
         
     
-    def loadFromFile(self, pathName = "./liftOnly/*.data"):
+    def loadFromFile(self, pathName = "./Data/liftOnly/*.data"):
         files = glob.glob(pathName)
+        print("loading files from")
+        print(pathName)
         for f in files:
-            print(f)
             with open(f, 'rb') as pickle_file:
                 dataList = pickle.load(pickle_file)[0]
                 start = 0
@@ -75,14 +95,28 @@ class trainDataLoader:
                 bodyData = []
                 rigidPos = []
                 markerPos = []
+                worldCenter = np.array(dataList[0][start][:3])
+                #[1,0,0], worldCenter->boxCenter
+                wc_bc = np.array(dataList[2][start][:3]) - worldCenter
+                wc_bc[1] = 0.0
+                wc_bc = np.array([wc_bc, [0,1,0]])
+                adj_rot = R.match_vectors(np.array([[1,0,0], [0,1,0]]), wc_bc)[0]
+                #adj_rot = R.match_vectors(wc_bc, wc_bc)[0]
+                #print(adj_rot.as_euler("xyz", degrees=True))
+                #print(wc_bc)
+                #exit()
+
                 for i in range(start, end, step):
                     try:
                     #bodyCenter = np.array(dataList[0][i][:3])
-                        worldCenter = np.array(dataList[0][0][:3])
-                        bodyCenter = np.array(dataList[0][i][:3]) - worldCenter
+                        
+                        #worldCenter = np.array(dataList[2][0][:3])
+                        
+
+                        bodyCenter = adj_rot.apply(np.array(dataList[0][i][:3]) - worldCenter)
                         #centerDistant = np.array(dataList[0][i][:3]) - bodyCenter
 
-                        bodyWhole = np.array(dataList[0][i][:]).reshape((21,3))- worldCenter
+                        bodyWhole = adj_rot.apply(np.array(dataList[0][i][:]).reshape((21,3))- worldCenter)
 
                         bodyWhole[1:, :] -= bodyCenter
                     except IndexError:
@@ -96,22 +130,22 @@ class trainDataLoader:
                     bodyWhole = bodyWhole.reshape((humanDimension))
                     bodyData.append(bodyWhole)
                     
-                    objPos = np.array(dataList[2][i][:3]) - worldCenter
+                    objPos = adj_rot.apply(np.array(dataList[2][i][:3]) - worldCenter)
                     objPos = objPos.tolist()
                     objRot = R.from_quat(dataList[2][i][3:])
                     objRot = objRot.as_euler("xyz").tolist()
                     rigidPos.append(np.array(objPos+objRot))
 
-                    objMarkers = np.array(dataList[3][i]) - worldCenter
+                    objMarkers = adj_rot.apply(np.array(dataList[3][i]) - worldCenter)
                     markerPos.append(objMarkers.reshape((12*3)))
 
-                self.skeletonData.append(np.array(bodyData))
-                self.objectPosData.append(np.array(rigidPos))
-                self.objectMarkerData.append(np.array(markerPos))
-                seqLength = len(bodyData)
-                print(seqLength)
-                self.shapes[0].append([seqLength, 6])
-                self.shapes[1].append([seqLength, 63])
+            self.skeletonData.append(np.array(bodyData))
+            self.objectPosData.append(np.array(rigidPos))
+            self.objectMarkerData.append(np.array(markerPos))
+            seqLength = len(bodyData)
+            print(seqLength)
+            self.shapes[0].append([seqLength, 6])
+            self.shapes[1].append([seqLength, 63])
     
     def generator(self):
         """
@@ -197,6 +231,21 @@ class trainDataLoader:
 
             self.obj_data.append(obj_zeros)
             self.skeleton_data.append(pos_zeros)
+
+            if self.flipData:
+                pos_zeros = np.zeros((max_length, humanDimension))
+                obj_zeros = np.zeros((max_length, objDimention))
+                pos_whole = np.array(skeletonPart[file_count][:]).astype(dt)
+                obj_whole = np.array(objPart[file_count][:]).astype(dt)
+                pos_whole = np.flip(pos_whole, axis=0)
+                obj_whole = np.flip(obj_whole, axis=0)
+
+                pos_zeros[:pos_whole.shape[0],:pos_whole.shape[1]] = pos_whole
+                obj_zeros[:obj_whole.shape[0],:obj_whole.shape[1]] = obj_whole
+                self.obj_data.append(obj_zeros)
+                self.skeleton_data.append(pos_zeros)
+
+
         self.updateNorm()
         for i in range(len(self.obj_data)):
             #self.obj_data[i] = (self.obj_data[i] - self.pos_mean) / self.pos_std
@@ -205,6 +254,18 @@ class trainDataLoader:
             #self.skeleton_data[i] *= 5.0
             #print(self.skeleton_data[i][:5])
         #exit()
+        '''
+        newOrder = [x for x in range(len(self.obj_data))]
+        random.shuffle(newOrder)
+        dataObj = []
+        dataSkeleton = []
+        print("here")
+        for order in newOrder:
+            dataObj.append(self.obj_data[order])
+            dataSkeleton.append(self.skeleton_data[order])
+        self.obj_data = dataObj
+        self.skeleton_data = dataSkeleton
+        '''
     
     def getDataset3(self):
         if not self.prepared:

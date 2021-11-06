@@ -3,140 +3,19 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import numpy as np
 import dataLoader
-
 loader = dataLoader.trainDataLoader()
 loader.prepareDataset()
 batch_size = 4
 
-def maskLabelLoss(yTrue, yPred):
-  #hand 8,12 base-0
-  print("enter loss")
-  obj_center = None
-  obj_center_allSeq = None
-  in_train = False
-  add_hand = True
-  final_frame_hand = False
-  if yTrue.shape[2] > 63:
-    obj_center = yTrue[:, -1, -3:]
-    obj_center_allSeq = yTrue[:, :, -3:]
-    yTrue = yTrue[:, :, :-3]
-    in_train = True
-  zerosPattern = tf.zeros_like(yPred[:,:,0])
-  #zerosPattern = tf.zeros((batch_size, 129))
-  mask = tf.reduce_sum(tf.math.abs(yTrue), axis=-1) > zerosPattern
-  mask2 = mask[:,:]
-  mask = tf.expand_dims(mask, axis=-1)
-  mask = tf.tile(mask, [1,1,63])
-  print("&&&&&")
-  print(yPred.shape)
-  print(mask.shape)
-  
-  yTrue_m = tf.boolean_mask(yTrue, mask)
-  yPred_m = tf.boolean_mask(yPred, mask)
-  mes = tf.keras.losses.MSE(yTrue_m, yPred_m)
-  
-  #loader.pose_mean  loader.pose_cov_inv
-  groupedPre = tf.reshape(tf.identity(yPred_m), (-1, 63))
-  part = groupedPre[:, 3:] - tf.convert_to_tensor(loader.pose_mean, dtype=tf.float32)
+import losses
 
-  handLoss = 0.0
-  if in_train and add_hand:
-    if final_frame_hand:
-      for i in range(batch_size):
-        lastFrame = tf.cast( tf.reduce_sum(tf.cast(mask2[i], tf.float32)), tf.int32)
-        handPos1 = yPred[i, lastFrame-2, 8*3:8*3+3]
-        handPos1 += yPred[i, lastFrame-2, :3]
-        #handPos1 /= 5.0 #norm
-        handPos1 = handPos1 * loader.ppl_std  + loader.ppl_mean
-        
-        diss1 = tf.math.sqrt(tf.reduce_sum((handPos1 - obj_center[i])**2))
-        if diss1 > 0.2:
-          handLoss += diss1 * 1.5
-        handPos2 = yPred[i, lastFrame-2, 12*3:12*3+3]
-        handPos2 += yPred[i, lastFrame-2, :3]
-        #handPos2 /= 5.0 #norm
-        handPos1 = handPos1 * loader.ppl_std  + loader.ppl_mean
-
-        diss2 = tf.math.sqrt(tf.reduce_sum((handPos2 - obj_center[i])**2))
-        #tf.print(handPos1)
-        #tf.print(obj_center[i])
-        if diss2 > 0.2:
-          handLoss += diss2 * 1.5
-    else:
-      for i in range(batch_size):
-        handPos1 = yPred[i, :, 8*3:8*3+3]
-        handPos1 += yPred[i, :, :3]
-        #handPos1 /= 5.0 #norm
-        handPos1 = handPos1 * loader.ppl_std  + loader.ppl_mean
-        
-        diss1 = tf.math.sqrt(tf.reduce_sum((handPos1 - obj_center_allSeq[i])**2, axis = -1))
-        diss1 = tf.boolean_mask(diss1, mask2[i])
-        dissZero = tf.zeros_like(diss1)
-        diss1 = tf.where(diss1 > 0.1, diss1*1.5, dissZero)
-        handLoss += tf.reduce_sum(diss1)
-
-        handPos2 = yPred[i, :, 12*3:12*3+3]
-        handPos2 += yPred[i, :, :3]
-        #handPos2 /= 5.0 #norm
-        handPos2 = handPos2 * loader.ppl_std  + loader.ppl_mean
-
-        diss2 = tf.math.sqrt(tf.reduce_sum((handPos2 - obj_center_allSeq[i])**2, axis = -1))
-        diss2 = tf.boolean_mask(diss2, mask2[i])
-        dissZero = tf.zeros_like(diss2)
-        diss2 = tf.where(diss2 > 0.1, diss2*1.5, dissZero)
-        handLoss += tf.reduce_sum(diss2)
-
-    
-  '''
-  poseMean = 0.0
-  
-  #tf.print(part)
-  part1 = tf.einsum("ab,cd->ad", part, tf.convert_to_tensor(loader.pose_cov_inv, dtype=tf.float32))
-  
-  part = tf.transpose(part, perm=[1, 0])
-  
-  part2 = tf.einsum("ab,cd->ad", part1, part)
-  print(part2.shape)
-  #exit()
-  poseMean = tf.reduce_sum(part2)
-  
-  poseMean = tf.reduce_sum(part2)
-  '''
-  poseMean = 0.0
-  pose_cov_inv = tf.convert_to_tensor(loader.pose_cov_inv, dtype=tf.float32)
-  for i in range(batch_size):
-    partThis = tf.reshape(part[i], (1,60))
-    part1 = tf.tensordot(partThis, pose_cov_inv, axes=1)
-    partThis = tf.transpose(partThis, perm=[1, 0])
-    part2 = tf.tensordot(part1, partThis, axes=1)
-    poseMean += tf.sqrt(part2)
-  if poseMean < 300:
-    poseMean = 0.0
-  #tf.print("hand loss")
-  #tf.print(poseMean * 0.00005)
-  #tf.print(handLoss * 0.001)
-  #tf.print(mes)
-  
-  return poseMean * 0.0001+mes+handLoss * 0.01
-  #return mes+handLoss * 0.1
-  #return mes
-
-def maskMSE(yTrue, yPred):
-  if yTrue.shape[2] > 63:
-    yTrue = yTrue[:, :, :-3]
-  zerosPattern = tf.zeros_like(yPred)
-  mask = tf.cast(tf.math.abs(yTrue), tf.float32) > tf.cast(zerosPattern, tf.float32)
-  
-  yTrue_m = tf.boolean_mask(yTrue, mask)
-  yPred_m = tf.boolean_mask(yPred, mask)
-  return tf.keras.losses.MSE(yTrue_m, yPred_m)
-
+import thisIK
 
 class TokenEmbeddingObj(layers.Layer):
   def __init__(self, maxlen, num_hid):
     super().__init__()
     self.denseEmb1 = tf.keras.layers.Dense(64)
-    self.denseEmb2 = tf.keras.layers.Dense(64)
+    self.denseEmb2 = tf.keras.layers.Dense(64, activation='relu')
     self.denseEmb3 = tf.keras.layers.Dense(num_hid)
     self.pos_emb = layers.Embedding(input_dim=maxlen, output_dim=num_hid)
     self.num_hid = num_hid
@@ -158,7 +37,6 @@ class TokenEmbeddingObj(layers.Layer):
     pe = pattern1 * pe1 + pattern2*pe2
     pe = tf.expand_dims(pe, 0)
     pe = tf.tile(pe,(batch_size, 1, 1))
-
     #positions = tf.range(start=0, limit=maxlen, delta=1)
     #positions = self.pos_emb(positions)
     result = x + pe
@@ -168,7 +46,8 @@ class TokenEmbeddingPpl(layers.Layer):
   def __init__(self, maxlen, num_hid):
     super().__init__()
     self.denseEmb1 = tf.keras.layers.Dense(128)
-    self.denseEmb2 = tf.keras.layers.Dense(num_hid)
+    self.denseEmb2 = tf.keras.layers.Dense(num_hid, activation='relu')
+    self.denseEmb3 = tf.keras.layers.Dense(num_hid)
     self.pos_emb = layers.Embedding(input_dim=maxlen, output_dim=num_hid)
     self.num_hid = num_hid
 
@@ -176,6 +55,7 @@ class TokenEmbeddingPpl(layers.Layer):
     maxlen = x.shape[-2]
     x = self.denseEmb1(x)
     x = self.denseEmb2(x)
+    x = self.denseEmb3(x)
     #positions = tf.range(start=0, limit=maxlen, delta=1)
     #positions = self.pos_emb(positions)
     #result = x + positions
@@ -326,7 +206,7 @@ class Transformer(keras.Model):
               f"dec_layer_{i}",
               TransformerDecoder(num_hid, num_head, num_feed_forward))
       self.classifier1 = layers.Dense(num_hid)
-      self.classifier2 = layers.Dense(num_classes)
+      self.classifier2 = layers.Dense(num_classes, name="final_result")
       print("finish process5")
 
   def decode(self, enc_out, target):
@@ -340,11 +220,13 @@ class Transformer(keras.Model):
     source = inputs[0]
     target = inputs[1]
     
+    
     x = self.encoder(source)
     y = self.decode(x, target)
     y = self.classifier1(y)
     result = self.classifier2(y)
     return result
+  
     
 
   def train_step(self, batch):
@@ -565,8 +447,6 @@ class Transformer_pre2pre(Transformer):
 
 
 
-
-
 class Transformer_newScheduleSampling(Transformer):
   def __init__(
         self, num_hid=64, num_head=2, num_feed_forward=128, source_maxlen=60, target_maxlen=60, num_layers_enc=4, num_layers_dec=1, num_classes=10, scheule_sampling_gt_rate = 80):
@@ -654,7 +534,278 @@ class Transformer_newScheduleSampling(Transformer):
 
     preds = self([source, dec_input])
 
-    metric = maskMSE(dec_target, preds)
+    metric = losses.maskMSE(dec_target, preds)
     print("-------metrics-------------")
     print(metric)
     return preds
+
+
+class Transformer_initalPose(Transformer_newScheduleSampling):
+  def __init__(
+        self, num_hid=64, num_head=2, num_feed_forward=128, source_maxlen=60, target_maxlen=60, num_layers_enc=4, num_layers_dec=1, num_classes=10, scheule_sampling_gt_rate = 80):
+        super().__init__(num_hid, num_head, num_feed_forward, source_maxlen, target_maxlen, num_layers_enc, num_layers_dec, num_classes, scheule_sampling_gt_rate)
+        self.initalPosStart1 = layers.Dense(num_hid*2, activation='relu')
+        self.initalPosStart2 = layers.Dense(num_hid*2, activation='relu')
+        self.initalPosStart25 = layers.Dense(num_hid)
+        self.initalPosStart3 = layers.Dense(63, name="intial_human")
+  
+
+  def call(self, inputs):
+    print("in call")
+    source = inputs[0]
+    target = inputs[1]
+
+    s1 = self.initalPosStart1(source[:,0,:])
+    s2 = self.initalPosStart2(s1)
+    s2 = self.initalPosStart25(s2)
+    initalPos = self.initalPosStart3(s2)
+    target = tf.concat((tf.expand_dims(initalPos, axis=1), target[:, 1:, :]), axis=1)
+    
+    x = self.encoder(source)
+    y = self.decode(x, target)
+    y = self.classifier1(y)
+    result = self.classifier2(y)
+    return result, initalPos
+  
+  def train_step(self, batch):
+    """Gt2Pre works well with mean pose loss"""
+    print("using new train step 2 Transformer_initalPose")
+    source, target = batch
+    dec_input = target[:, :-1, :]
+    dec_input = tf.dtypes.cast(dec_input, tf.float32)
+    dec_target = target[:, 1:, :]
+
+    y = dec_target
+    y_initalPos = target[:, 0, :]
+
+    obj_center = self.getObjCenterInfo(batch_size, source)
+    y = tf.concat((y, obj_center), axis = -1)
+    #with tf.GradientTape() as tape:
+    y_pred1, initalPos = self([source, dec_input], training=True)
+    #loss1 = self.compiled_loss(y, y_pred1)
+    new_input = tf.concat((tf.expand_dims(dec_input[:,0,:], axis=1), y_pred1[:,:-1,:]), axis=1)
+    new_input = self.mix_Data(dec_input, new_input, self.scheule_sampling_gt_rate)
+    with tf.GradientTape() as tape:
+      y_pred2, initalPos = self([source, new_input], training=True)
+      
+      loss2 = self.compiled_loss(y_true={"final_result": y, "intial_human":y_initalPos}, y_pred={"final_result":y_pred2, "intial_human":initalPos})
+      #print(loss2)
+      #exit()
+      #loss = loss1 + loss2
+      loss = loss2
+    trainable_vars = self.trainable_variables
+    gradients = tape.gradient(loss, trainable_vars)
+    self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    #self.compiled_metrics.update_state(loss)
+    self.compiled_metrics.update_state(y_true={"final_result": y, "intial_human":y_initalPos}, y_pred={"final_result":y_pred2, "intial_human":initalPos})
+    #return {"loss": self.loss_metric.result()}
+    return {m.name: m.result() for m in self.metrics}
+  
+  def test_step(self, batch):
+    print("using oritnal test step")
+    x, y = batch
+    source = x
+    target = y
+    y = target[:, 1:, :]
+    dec_input = target[:, :-1]
+    dec_target = target[:, 1:]
+    y_initalPos = target[:, 0, :]
+
+    preds, initalPos = self([source, dec_input])[:2]
+    #loss = self.compiled_loss(dec_target, y_pred=preds)
+    self.compiled_metrics.update_state(y_true={"final_result": y, "intial_human":y_initalPos}, y_pred={"final_result":preds, "intial_human":initalPos})
+    return {m.name: m.result() for m in self.metrics}
+  
+  def generate(self, source, dec_start_input, dec_Pre= None):
+    print("using oritnal generate step")
+    source = source.reshape((1, self.target_maxlen, 36))
+    enc = self.encoder(source)
+    s1 = self.initalPosStart1(source[:,0,:])
+    s2 = self.initalPosStart2(s1)
+    s2 = self.initalPosStart25(s2)
+    initalPos = self.initalPosStart3(s2)
+    dec_start_input = tf.expand_dims(initalPos, axis=1)
+    #target = tf.concat((tf.expand_dims(initalPos, axis=1), target[:, 1:, :]), axis=1)
+    for i in range(self.target_maxlen - 1):
+      dec_out = self.decode(enc, dec_start_input)
+      out = self.classifier1(dec_out)
+      out = self.classifier2(out)
+      out = out[:, -1, :]
+      out = tf.expand_dims(out, axis=1)
+      dec_start_input = tf.concat([dec_start_input, out], axis=-2)
+    dec_start_input = tf.dtypes.cast(dec_start_input, tf.float32)
+    #dec2_input2 = tf.concat((tf.convert_to_tensor(dec_start_input, dtype=tf.float32), result[:,:-1,:]), axis=1)
+    result = self([source, dec_start_input[:, :-1, :]])
+    print("++++++++")
+    return result
+
+class Transformer_VAEinitalPose(Transformer_initalPose):
+  def __init__(
+        self, num_hid=64, num_head=2, num_feed_forward=128, source_maxlen=60, target_maxlen=60, num_layers_enc=4, num_layers_dec=1, num_classes=10, scheule_sampling_gt_rate = 80):
+        super().__init__(num_hid, num_head, num_feed_forward, source_maxlen, target_maxlen, num_layers_enc, num_layers_dec, num_classes, scheule_sampling_gt_rate)
+        self.latentDimension = num_hid
+        self.add2Start = tf.Variable(tf.random.normal(shape=(1, 2, 36)), trainable=True)
+        self.discriminator_model = None
+        #self.add2Start_batch = tf.tile(self.add2Start, [batch_size, 1, 1])
+
+  def sampling(self, z_mean, z_log_var, random=True):
+    #batch_size self.latentDimension
+    if random:
+      epsilon = tf.random.normal(shape=(batch_size, self.latentDimension))
+    else:
+      epsilon = tf.ones(shape=(batch_size, self.latentDimension)) * 0.0
+    return z_mean + tf.math.exp(0.5 * z_log_var) * epsilon
+  
+
+  def setDiscriminator(self, model_using):
+    self.discriminator_model = model_using
+
+
+  def call(self, inputs):
+    print("in call")
+    source = inputs[0]
+    target = inputs[1]
+
+    s1 = self.initalPosStart1(source[:,0,:])
+    s2 = self.initalPosStart2(s1)
+    s2 = self.initalPosStart25(s2)
+    initalPos = self.initalPosStart3(s2)
+    target = tf.concat((tf.expand_dims(initalPos, axis=1), target[:, 1:, :]), axis=1)
+
+    initalPos2 = tf.identity(initalPos)
+    firstTwoFrameDiff = tf.keras.losses.mean_squared_error(initalPos2, target[:,1,:])
+
+    add2Start_batch = tf.tile(self.add2Start, [batch_size, 1, 1])
+    #source_add2 = tf.concat([add2Start_batch, source], axis=1)   #change the order???
+    source_add2 = tf.concat([source, add2Start_batch], axis=1)
+    
+    x = self.encoder(source_add2)
+    z_mean = x[:, 0, :]
+    z_log_var = x[:, 1, :]
+    kl_loss = - 0.5 * tf.reduce_mean(z_log_var - tf.math.square(z_mean) - tf.math.exp(z_log_var) + 1.0)
+    #self.add_loss(kl_loss)
+    #tf.print(kl_loss)
+
+    sample = self.sampling(z_mean, z_log_var)
+    sample = tf.tile(tf.expand_dims(sample, axis=1), [1, self.target_maxlen, 1])
+
+    #x = x[:, 2:, :]
+
+    #x = tf.concat((x[:, 2:, :], sample), axis=-1)  #VAE2 test
+    x = tf.concat((source, sample), axis=-1)
+
+    y = self.decode(x, target)
+    y = self.classifier1(y)
+    result = self.classifier2(y)
+    return result, initalPos, (kl_loss, firstTwoFrameDiff) 
+
+  def train_step(self, batch):
+    """Gt2Pre works well with mean pose loss"""
+    print("using new train step 2 Transformer_VAEinitalPose")
+    source, target = batch
+    dec_input = target[:, :-1, :]
+    dec_input = tf.dtypes.cast(dec_input, tf.float32)
+    dec_target = target[:, 1:, :]
+
+    y = dec_target
+    y_initalPos = target[:, 0, :]
+
+    obj_center = self.getObjCenterInfo(batch_size, source)
+    y = tf.concat((y, obj_center), axis = -1)
+    #with tf.GradientTape() as tape:
+    y_pred1, _, _ = self([source, dec_input], training=True)
+    #loss1 = self.compiled_loss(y, y_pred1)
+    new_input = tf.concat((tf.expand_dims(dec_input[:,0,:], axis=1), y_pred1[:,:-1,:]), axis=1)
+    new_input = self.mix_Data(dec_input, new_input, self.scheule_sampling_gt_rate)
+    with tf.GradientTape() as tape:
+      y_pred2, initalPos, internal_losses = self([source, new_input], training=True)
+      
+      kl_loss, firstTwoFrameDiff = internal_losses
+      loss2 = self.compiled_loss(y_true={"final_result": y, "intial_human":y_initalPos}, y_pred={"final_result":y_pred2, "intial_human":initalPos})
+      loss = loss2 + kl_loss + firstTwoFrameDiff
+      if self.discriminator_model is not None:
+        loss_discriminator = tf.reduce_sum(self.discriminator_model(y_pred2))
+        tf.print("dis")
+        tf.print(self.discriminator_model(y_pred2))
+        tf.print(loss_discriminator)
+        loss += loss_discriminator
+      #tf.print(firstTwoFrameDiff)
+    trainable_vars = self.trainable_variables
+    gradients = tape.gradient(loss, trainable_vars)
+    self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    self.compiled_metrics.update_state(y_true={"final_result": y, "intial_human":y_initalPos}, y_pred={"final_result":y_pred2, "intial_human":initalPos})
+    return {m.name: m.result() for m in self.metrics}
+
+  def generate(self, source, dec_start_input, dec_Pre= None):
+    print("using VAE generate step")
+    source = source.reshape((1, self.target_maxlen, 36))
+    #enc = self.encoder(source)
+    s1 = self.initalPosStart1(source[:,0,:])
+    s2 = self.initalPosStart2(s1)
+    s2 = self.initalPosStart25(s2)
+    initalPos = self.initalPosStart3(s2)
+    dec_start_input = tf.expand_dims(initalPos, axis=1)
+
+    #source_add2 = tf.concat([self.add2Start, source], axis=1)
+    source_add2 = tf.concat([source, self.add2Start], axis=1)
+    x = self.encoder(source_add2)
+    
+
+    z_mean = x[:, 0, :]
+    z_log_var = x[:, 1, :]
+    sample = self.sampling(z_mean, z_log_var, False)
+    sample = tf.tile(tf.expand_dims(sample, axis=1), [1, self.target_maxlen, 1])
+
+
+    #enc = tf.concat((x[:, 2:, :], sample), axis=-1)  #VAE2 test
+    enc = tf.concat((source, sample), axis=-1)
+
+    for i in range(self.target_maxlen - 1):
+      dec_out = self.decode(enc, dec_start_input)
+      out = self.classifier1(dec_out)
+      out = self.classifier2(out)
+      out = out[:, -1, :]
+
+      '''    #use IK as post-process
+      outCentered = out[:,:].numpy() * loader.ppl_std  + loader.ppl_mean
+      #6-7-8  10-11-12
+      shoulder1, shoulder2 = (outCentered[0, 6*3:6*3+3], outCentered[0, 10*3: 10*3+3])
+      elbow1, elbow2 = (outCentered[0, 7*3: 7*3+3], outCentered[0, 11*3:11*3+3])
+      hand1, hand2 = (outCentered[0, 8*3:8*3+3], outCentered[0, 12*3:12*3+3])
+      newelbow1, newhand1 = thisIK.solver(source[0, i, 7*3:7*3+3] - outCentered[0, :3], shoulder1, elbow1, hand1)
+      newelbow2, newhand2 = thisIK.solver(source[0, i, 9*3:9*3+3] - outCentered[0, :3], shoulder2, elbow2, hand2)
+      outCentered[0,7*3: 7*3+3], outCentered[0,8*3: 8*3+3] = (newelbow1, newhand1)
+      outCentered[0,11*3: 11*3+3], outCentered[0,12*3: 12*3+3] = (newelbow2, newhand2)
+      out = tf.convert_to_tensor((outCentered - loader.ppl_mean) / loader.ppl_std, dtype=tf.float32)
+      '''
+      
+      out = tf.expand_dims(out, axis=1)
+      dec_start_input = tf.concat([dec_start_input, out], axis=-2)
+    dec_start_input = tf.dtypes.cast(dec_start_input, tf.float32)
+    #dec2_input2 = tf.concat((tf.convert_to_tensor(dec_start_input, dtype=tf.float32), result[:,:-1,:]), axis=1)
+    #result = self([source, dec_start_input[:, :-1, :]])[0]
+    result = dec_start_input[:, :-1, :]
+    print("++++++++")
+    return result
+
+  def predict_step(self, batch):
+    source, target = batch
+    source = tf.expand_dims(source, axis=0)
+    target = tf.expand_dims(target, axis=0)
+    dec_input = target[:, :-1, :]
+    dec_input = tf.dtypes.cast(dec_input, tf.float32)
+    dec_target = target[:, 1:, :]
+
+    y = dec_target
+    y_initalPos = target[:, 0, :]
+
+    obj_center = self.getObjCenterInfo(batch_size, source)
+    #y = tf.concat((y, obj_center), axis = -1)
+    #with tf.GradientTape() as tape:
+    y_pred1, _, _ = self([source, dec_input], training=False)
+    #loss1 = self.compiled_loss(y, y_pred1)
+    new_input = tf.concat((tf.expand_dims(dec_input[:,0,:], axis=1), y_pred1[:,:-1,:]), axis=1)
+    new_input = self.mix_Data(dec_input, new_input, self.scheule_sampling_gt_rate)
+    y_pred2, _, _ = self([source, new_input], training=False)
+    return y_pred2
+

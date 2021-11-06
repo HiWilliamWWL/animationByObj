@@ -29,9 +29,11 @@ startEnd = {"t1":[352], "t2":[320], "t3":[388], "t4":[257], "t5":[212], "t6":[28
             "box5_p1":[78], "box5_p2":[81], "box5_p3":[84]}
 
 
-humanDimension = 63
-humanDimension1 = 60
-humanDimension2 = 3+17*3
+
+humanDimension_pos = 20 * 3
+humanDimension_rot = 21 * 6 
+
+humanDimension = 3 + humanDimension_rot + humanDimension_pos  #global trans + all rots + joint trans = 3+126+60 = 189
 objDimention = 36
 
 
@@ -44,10 +46,14 @@ class trainDataLoader:
         self.skeletonData = []
         self.objectPosData = []
         self.objectMarkerData = []
-        self.shapes = [[],[]]
         self.obj_data = []
         self.skeleton_data = []
         self.saved_Tpose = None
+
+        self.humanDimension = humanDimension
+        self.humanDimension_pos = humanDimension_pos
+        self.humanDimension_rot = humanDimension_rot
+        #self.is_walk = is_walk
 
         self.loadFromFile(num_files, pathNames)
 
@@ -66,13 +72,14 @@ class trainDataLoader:
         self.flipData = True
         self.useRotation = True
 
-        self.obj_mean_saved = 0.20327034346397518
-        self.obj_std_saved = 0.42398764560154273
+        self.obj_mean_saved = 0.19494141736714368
+        self.obj_std_saved = 0.429013139920569
 
-        self.ppl_mean_saved_a = 0.09123124554080177
+        self.ppl_mean_saved_a = 0.09123124554080177 # to be clean up
         self.ppl_std_saved_a = 0.7756390174495723
-        self.ppl_mean_saved_p = 0.07805996929042856
-        self.ppl_std_saved_p = 0.3341384650987687
+
+        self.ppl_mean_saved_p = 0.04803127829445547
+        self.ppl_std_saved_p = 0.3175353458733565
 
         
         
@@ -82,10 +89,10 @@ class trainDataLoader:
         self.obj_mean = np.mean(temp_obj)
         self.obj_std = np.std(temp_obj)
 
-        temp_ppl_a = np.array(self.skeleton_data)[:, :, 3:17*3].flatten()
-        self.ppl_mean_a = np.mean(temp_ppl_a)
-        self.ppl_std_a = np.std(temp_ppl_a)
-        temp_ppl_p = np.array(self.skeleton_data)[:, :, 3+17*3:].flatten()
+        #temp_ppl_a = np.array(self.skeleton_data)[:, :, 3:17*3].flatten()
+        #self.ppl_mean_a = np.mean(temp_ppl_a)
+        #self.ppl_std_a = np.std(temp_ppl_a)
+        temp_ppl_p = np.array(self.skeleton_data)[:, :, -60:].flatten()
         self.ppl_mean_p = np.mean(temp_ppl_p)
         self.ppl_std_p = np.std(temp_ppl_p)
         #temp_obj = (temp_obj - self.obj_mean) / self.obj_std
@@ -123,8 +130,6 @@ class trainDataLoader:
         #print( self.pose_cov_inv_init.dot(pose_cov_init))
         #exit()
         '''
-        
-
         
     
     def loadFromFile(self, num_files = None, pathNames = ["./Data/liftOnly/*.data", "./Data/data_new/*.data"]):
@@ -164,7 +169,9 @@ class trainDataLoader:
                 #[1,0,0], worldCenter->boxCenter
                 
 
-                wc_bc = np.array(dataList[2][start][:3]) - worldCenter
+                #wc_bc = np.array(dataList[2][start][:3]) - worldCenter
+                wc_bc = np.mean(np.array(dataList[3][start])) - worldCenter
+                
                 wc_bc[1] = 0.0
                 wc_bc = np.array([wc_bc, [0,1,0]])
                 adj_rot = R.match_vectors(np.array([[1,0,0], [0,1,0]]), wc_bc)[0]
@@ -193,16 +200,21 @@ class trainDataLoader:
 
                     #bodyWhole = np.concatenate((centerDistant.reshape((1,3)), bodyWhole), axis=0)
                     JI = JointsInfo(bodyWholePos)
-                    allRots = JI.get_parent_17_rots()
+                    #allRots = JI.get_parent_17_rots()
+                    allRots = JI.get_all_rots_vecs()
                     if self.saved_Tpose is None and i > end - 10:
                         self.saved_Tpose = JI.generate_standard_Tpose_from_this_bone_length()
 
                     bodyWhole = [bodyCenter]
                     for rot in allRots:
-                        rotAngles = rot.as_euler("xyz")
-                        bodyWhole.append(rotAngles)
-                    bodyWhole = np.array(bodyWhole).reshape((humanDimension2))
-                    bodyWhole = np.concatenate((bodyWhole, bodyWholePos[1:, :].reshape((humanDimension1))))
+                        #rotAngles = rot.as_euler("xyz")
+                        #bodyWhole.append(rotAngles)
+
+                        bodyWhole.append(rot[0])  
+                        bodyWhole.append(rot[1])#21 * 6 = 126
+                    
+                    bodyWhole = np.array(bodyWhole).flatten()
+                    bodyWhole = np.concatenate((bodyWhole, bodyWholePos[1:, :].reshape((humanDimension_pos))))
                     
 
                     #bodyWhole = bodyWhole.reshape((humanDimension2 + humanDimension1))
@@ -221,9 +233,7 @@ class trainDataLoader:
             self.objectPosData.append(np.array(rigidPos))
             self.objectMarkerData.append(np.array(markerPos))
             seqLength = len(bodyData)
-            print(f)
-            self.shapes[0].append([seqLength, 6])
-            self.shapes[1].append([seqLength, humanDimension2])
+            print("finish processing " + f)
     
 
     def prepareDataset(self):
@@ -235,7 +245,7 @@ class trainDataLoader:
         max_length = self.maxLen  #130
 
         for file_count in range(len(self.skeletonData)):
-            pos_zeros = np.zeros((max_length, humanDimension2 + humanDimension1))
+            pos_zeros = np.zeros((max_length, humanDimension))
             obj_zeros = np.zeros((max_length, objDimention))
             #inital_pos = np.array(skeletonPart[file_count][0]).astype(dt)
             #delta_pos = (np.array(skeletonPart[file_count][1:]).astype(dt) - inital_pos)
@@ -251,7 +261,7 @@ class trainDataLoader:
             self.skeleton_data.append(pos_zeros)
 
             if self.flipData:
-                pos_zeros = np.zeros((max_length, humanDimension2 + humanDimension1))
+                pos_zeros = np.zeros((max_length, humanDimension))
                 obj_zeros = np.zeros((max_length, objDimention))
                 pos_whole = np.array(skeletonPart[file_count][:]).astype(dt)
                 obj_whole = np.array(objPart[file_count][:]).astype(dt)
@@ -261,11 +271,11 @@ class trainDataLoader:
                 wold_center = np.copy(pos_whole[0, :3])
                 print(wold_center)
                 #exit()
-                pos_whole_temp = pos_whole.reshape((self.maxLen, 38, 3)) #114=3+ 17*3 + 20 * 3
+                pos_whole_temp = pos_whole.reshape((self.maxLen, 63, 3)) #3+21*2*3+20*3 = 63*3 = 189
                 pos_whole_temp[:, 0, :] -= wold_center
                 #pos_whole_temp[:, -20:, :] -= wold_center
                 #pos_whole[:, :] -= wold_center
-                pos_whole = pos_whole_temp.reshape((self.maxLen, 38 * 3))
+                pos_whole = pos_whole_temp.reshape((self.maxLen, 63 * 3))
 
                 obj_whole_temp = obj_whole.reshape((self.maxLen,12,3))
                 obj_whole_temp -= wold_center
@@ -278,24 +288,25 @@ class trainDataLoader:
 
 
         self.updateNorm()
-        save_file_num = 1
+        save_file_num = 0
+        write_mode = 0  #0->None 1->pose 2->angles
         for i in range(len(self.obj_data)):
             #self.obj_data[i] = (self.obj_data[i] - self.pos_mean) / self.pos_std
             #self.skeleton_data[i][0, :] = (self.skeleton_data[i][0, :] - self.pos_mean) / self.pos_std
             #self.skeleton_data[i] = (self.skeleton_data[i] - self.ppl_mean) / ( self.ppl_std)
             #self.skeleton_data[i][:, 3:] = self.skeleton_data[i][:, 3:] / self.ppl_std
-            self.skeleton_data[i][:, 3:17*3] = self.skeleton_data[i][:, 3:17*3] / 3.1415926536
-            self.skeleton_data[i][:, 3+17*3:] = (self.skeleton_data[i][:, 3+17*3:] - self.ppl_mean_p) / self.ppl_std_p
+            #self.skeleton_data[i][:, 3:humanDimension_rot] = self.skeleton_data[i][:, 3:17*3] / 3.1415926536
+            self.skeleton_data[i][:, 3+humanDimension_rot:] = (self.skeleton_data[i][:, 3+humanDimension_rot:] - self.ppl_mean_p) / self.ppl_std_p
             self.obj_data[i] = (self.obj_data[i] - self.obj_mean) / self.obj_std 
             #self.skeleton_data[i] *= 5.0
             #print(self.skeleton_data[i][:5])
-            if i == save_file_num and True:
-                with open("./Tests/test_angles2/testResult_a.pb", 'wb') as pickle_file:
+            if i == save_file_num and write_mode == 1:
+                with open("./Tests/data_load_test/testResult_a.pb", 'wb') as pickle_file:  #write pose
                     thisFileSkeleton = self.skeleton_data[i][:, :]
                     #thisFileSkeleton[:, 3:3+60] = self.skeleton_data[i][:, 3+17*3:] * self.ppl_std_saved_p + self.ppl_mean_saved_a
-                    thisFileSkeleton[:, 3:3+60] = self.skeleton_data[i][:, 3+17*3:] * self.ppl_std_p + self.ppl_mean_p
+                    thisFileSkeleton[:, 3:3+humanDimension_pos] = self.skeleton_data[i][:, 3+humanDimension_rot:] * self.ppl_std_p + self.ppl_mean_p
                     #thisFileSkeleton = thisFileSkeleton[:, :63].tolist()
-                    thisFileSkeleton = thisFileSkeleton[:, :63].reshape(-1, 21, 3)
+                    thisFileSkeleton = thisFileSkeleton[:, :3+humanDimension_pos].reshape(-1, 21, 3)
                     for ii in range(20):
                         thisFileSkeleton[:, 1+ii] = thisFileSkeleton[:, 1+ii] + thisFileSkeleton[:, 0]
 
@@ -303,6 +314,21 @@ class trainDataLoader:
                     thisFileObj = self.obj_data[i][:, :] * self.obj_std + self.obj_mean
                     #thisFileObj = thisFileObj.tolist()
                     dataList = pickle.dump([thisFileSkeleton.reshape(-1, 63), thisFileObj], pickle_file)
+                    print("finish writing temp file")
+            elif i == save_file_num and write_mode == 2:
+                with open("./Tests/data_load_test/testResult_a.pb", 'wb') as pickle_file:  #write angles
+                    thisFileSkeleton = self.skeleton_data[i][:, :]  #[time,dimensions]
+                    bodyWhole_Result = []
+                    thisFileObj = self.obj_data[i][:, :] * self.obj_std + self.obj_mean
+                    for ii in range(self.maxLen - 1):
+                        bodyCenter = thisFileSkeleton[ii, :3]
+                        JI = JointsInfo(self.saved_Tpose)
+                        JI.apply_global_trans(bodyCenter)
+                        allRotsSave = thisFileSkeleton[ii, 3:3+humanDimension_rot].reshape((21,6))
+
+                        JI.forward_kinematics_21Joints_vecs(allRotsSave)
+                        bodyWhole_Result.append(JI.get_all_poses().reshape(63))
+                    dataList = pickle.dump([np.array(bodyWhole_Result), thisFileObj], pickle_file)
                     print("finish writing temp file")
         #exit()
         '''
@@ -339,6 +365,7 @@ class trainDataLoader:
         return x,y
 
 
-#t = trainDataLoader(num_files = None, pathNames = ["./Data/oneFile/*.data"])
+#t = trainDataLoader(num_files = 1, pathNames = ["./Data/walkData/*.data"])
+#t = trainDataLoader(num_files = 1, pathNames = ["./Data/liftOnly/test/wanted/*.data"])
 #t = trainDataLoader()
 #t.getDataset3()

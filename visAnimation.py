@@ -52,6 +52,9 @@ def update(frame,*fargs):
 def updateHumanObj(frame, *fargs):
     ax.clear()
     bodyData, objPoint, scat = fargs
+    print(frame)
+    print(bodyData[frame, :])
+    print("_______________")
     z_points = bodyData[frame, :, 2] #* -1.0
     x_points = bodyData[frame, :, 0]
     y_points = bodyData[frame, :, 1]

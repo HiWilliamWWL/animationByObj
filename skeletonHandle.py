@@ -29,6 +29,7 @@ class singleJoint:
         for child in self.children:
             self.child_Tpose_norm[child.num] = self.local_frame.apply(self.child_Tpose_norm[child.num])
             child.set_local_frame(rot)
+        #print(self.child_Tpose_norm)
 
     
     def apply_rot(self, rot):
@@ -112,12 +113,22 @@ class JointsInfo:
 
     def get_all_rots(self):
         rots = []
-        print("first rots")
         for i in range(21):
             rots.append(self.all_joints[i].local_frame)
-            see = self.all_joints[i].local_frame.as_euler("xyz", degrees=True)
-            print(see)
+            #see = self.all_joints[i].local_frame.as_euler("xyz", degrees=True)
+            #print(see)
         return rots
+    
+    def get_all_rots_vecs(self):
+        #upward vec:[0, 1, 0]; forward vec: [0, 0, 1]
+        rots = []
+        origin_rot_vecs = np.array([[0, 1, 0], [0, 0, 1]])
+        for i in range(21):
+            target_vecs = self.all_joints[i].local_frame.apply(origin_rot_vecs)
+            #target_vecs = target_vecs.flatten()
+            rots.append(target_vecs)
+        return rots
+
     
     def get_parent_17_rots(self):
         rots = []
@@ -147,7 +158,15 @@ class JointsInfo:
                     rot_T2Init = self.rotation_matrix_from_vectors(source_vec[0], desc_vec[0])
                     rot_T2Init = Rot.from_matrix(rot_T2Init)
                 elif len(source_vec) >= 1:
-                    rot_T2Init = Rot.align_vectors(np.array(desc_vec), np.array(source_vec))[0]
+                    try:
+                        rot_T2Init = Rot.align_vectors(np.array(desc_vec), np.array(source_vec))[0]
+                    except np.linalg.LinAlgError:
+                        print("error here")
+                        print(current_joint.num)
+                        print(np.array(desc_vec))
+                        print(np.array(source_vec))
+                        print(current_joint.child_Tpose_norm)
+                        exit()
             else:
                 rot_T2Init = self.init_global_rot
             
@@ -164,6 +183,22 @@ class JointsInfo:
         
         def operate_FK(current_joint):
             current_joint.apply_rot(applyRots[current_joint.num])
+            for child in current_joint.children:
+                operate_FK(child)
+        
+        operate_FK(self.all_joints[0])
+    
+    def forward_kinematics_21Joints_vecs(self, applyRots):
+        #applyRots ndarray->shape=(21,6)
+        def operate_FK(current_joint):
+            rotVec_y = applyRots[current_joint.num][:3]
+            rotVec_z = applyRots[current_joint.num][3:]
+            rotVec_x = np.cross(rotVec_y, rotVec_z)
+            rotVec_x = rotVec_x / np.linalg.norm(rotVec_x)
+            rotVec = np.concatenate((rotVec_x, rotVec_y, rotVec_z)).reshape((3,3))
+            currentRotation = Rot.from_matrix(rotVec).inv()
+
+            current_joint.apply_rot(currentRotation)
             for child in current_joint.children:
                 operate_FK(child)
         
@@ -191,7 +226,12 @@ class JointsInfo:
             start, end = connection
             diffHere = self.all_joints[end].pose - self.all_joints[start].pose
             diffHere = np.linalg.norm(diffHere)
+            
+            if end in [5,6,7,8,9,10,11,12] and diffHere < 0.1:
+                diffHere = 0.21  #re-construct bones if arms are losing
             bone_length.append(diffHere)
+                
+            
         bone_length = np.array(bone_length)
         bodyWhole_T = np.array([[.0, .0, .0] for k in range(21) ])
         for k, connection in enumerate(self.joints_connection):

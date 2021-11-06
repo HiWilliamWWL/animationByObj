@@ -8,20 +8,21 @@ import dataLoader
 import numpy as np
 import pickle
 import ABOtransformer
+import losses
 
 ABOtransformer.batch_size = 1
 max_target_len = 85 #130
 
 
 checkPointFolder = './Checkpoints5/'
-testFilePath = "./test5"
+testFilePath = "./test7"
 useFormerTest = True
 f1 = testFilePath+"/testResult_a.pb"
 f2 = testFilePath+"/testResult_b.pb"
 f3 = testFilePath+"/testResult_t.pb"
 selectDataCount = 3  #1 3
 
-objGlobalTrans = [-0.1, -0.1, 0.0]
+objGlobalTrans = [.0, .0, 0.0]
 
 
 objGlobalTrans = tf.reshape(tf.convert_to_tensor(objGlobalTrans), [1,1,1,3])
@@ -41,7 +42,7 @@ model = ABOtransformer.Transformer_newScheduleSampling(
     num_classes=63
 )
 optimizer = keras.optimizers.Adam(0.001)
-model.compile(optimizer=optimizer, loss=ABOtransformer.maskLabelLoss, metrics=ABOtransformer.maskLabelLoss)
+model.compile(optimizer=optimizer, loss=losses.maskLabelLoss, metrics=losses.maskLabelLoss)
 model.load_weights(checkPointFolder+"cp.ckpt")
 print("weight loaded")
 

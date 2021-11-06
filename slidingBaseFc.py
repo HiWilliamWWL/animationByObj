@@ -2,10 +2,8 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 import numpy as np
-import dataLoader
 
 batch_size = 4
-import losses
 
 '''
     startingPose Generate: Obj85->H1

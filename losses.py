@@ -176,11 +176,11 @@ def maskLabelLoss_angles(yTrue, yPred):
   in_train = False
   add_hand = True
   handLoss = 0.0
-  if yTrue.shape[2] > 114:   #54
+  if yTrue.shape[2] > loader.humanDimension:   #54
     obj_center = yTrue[:, -1, -3:]
     obj_center_allSeq = yTrue[:, :, -3:] * loader.obj_std + loader.obj_mean
     in_train = True
-    yTrue = yTrue[:, :, :114]
+    yTrue = yTrue[:, :, :-3]
   zerosPattern = tf.zeros_like(yPred)
   mask = tf.cast(tf.math.abs(yTrue), tf.float32) > tf.cast(zerosPattern, tf.float32)
   
@@ -192,7 +192,7 @@ def maskLabelLoss_angles(yTrue, yPred):
 
   if in_train and add_hand:
     for i in range(batch_size):
-      offsetIndex = 3 + 17*3
+      offsetIndex = 3 + loader.humanDimension_rot
       #handPos1 = yPred[i, :, offsetIndex + 8*3 : offsetIndex + 8*3+3]  #7
       handPos1 = tf.reshape(yPred[i, :, offsetIndex:], (-1, 20, 3))[:, 7]
       handPos1 += yPred[i, :, :3]
@@ -219,9 +219,12 @@ def maskLabelLoss_angles(yTrue, yPred):
 
   return 5.0 * tf.keras.losses.MSE(yTrue_m, yPred_m) + handLoss * 0.0001
 
+def maskLabelLoss_angles_simple(yTrue, yPred):
+  return tf.keras.losses.MSE(yTrue, yPred)
+
 def maskMSE_angles(yTrue, yPred):
-  if yTrue.shape[2] > 114:   #54
-    yTrue = yTrue[:, :, :114]
+  if yTrue.shape[2] > loader.humanDimension:   #54
+    yTrue = yTrue[:, :, :-3]
   zerosPattern = tf.zeros_like(yPred)
   mask = tf.cast(tf.math.abs(yTrue), tf.float32) > tf.cast(zerosPattern, tf.float32)
   
@@ -230,7 +233,8 @@ def maskMSE_angles(yTrue, yPred):
   return tf.keras.losses.MSE(yTrue_m, yPred_m)
 
 def initialPoseLoss_angles(yTrue, yPred):
-  mse = tf.keras.losses.MSE(yTrue[:, 3:], yPred[:, 3:])
+  mse1 = tf.keras.losses.MSE(yTrue[:, 3:-60], yPred[:, 3:-60])
+  mse2 = tf.keras.losses.MSE(yTrue[:, -60:], yPred[:, -60:])
   #poseMean = 0.0
   '''
   pose_cov_inv = tf.convert_to_tensor(loader.pose_cov_inv_init, dtype=tf.float32)
@@ -261,4 +265,5 @@ def initialPoseLoss_angles(yTrue, yPred):
       poseMean = 0.0
   '''
   #return 20.0*mse + poseMean * 0.001
-  return 5.0 * mse
+  #tf.print(mse1)
+  return 5.0 * (mse1 + mse2)
