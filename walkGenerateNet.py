@@ -8,10 +8,32 @@ batch_size = 4
     startingPose Generate: Obj85->H1
     Generative: Obj2, H1 -> H1
 '''
+class mixWeightNN(layers.Layer):
+  def __init__(self, weightShape, num_experts = 3, activationFunction='relu'):
+    super().__init__()
+    input_d , output_d = weightShape
+    self.thisBias = tf.zeros([output_d], tf.float32)
+    self.all_weights = tf.random.normal([num_experts, input_d, output_d])
+    self.activationLayer = None
+    if activationFunction is not None:
+      self.activationLayer = tf.keras.layers.Activation(activationFunction)
+  
+
+  def call(self, x, expert_weights):
+    current_weight = tf.einsum("e,emn->mn", expert_weights, self.all_weights)
+    result = tf.einsum("mn, bm -> bn", current_weight, x) + self.thisBias
+    if self.activationLayer is not None:
+      result = self.activationLayer(result)
+    return result
+
+
+
 class walkGenerateNet(keras.Model):
   def __init__(
-      self, num_hid=128, target_maxlen=85, num_classes=27, num_experts = 5):
+      self, num_hid=128, target_maxlen=85, num_classes=27, num_experts = 3, num_input_dimension = 20):
       super().__init__()
+      self.expertWeights = [[] for i in range(num_experts)]
+
       self.target_maxlen = target_maxlen
 
       self.flattenInit = layers.Flatten()
@@ -24,14 +46,15 @@ class walkGenerateNet(keras.Model):
       self.gate4 = layers.Dense(num_hid)
       self.gate5 = layers.Dense(num_experts, name="expert_weights", activation='softmax')  #63  54  54+63-3=114
 
-      self.walk1 = layers.Dense(num_hid*4, activation='relu',kernel_initializer='random_normal',bias_initializer='zeros')
+      self.walkPortionDimensions = [num_input_dimension, num_hid*4, num_hid*2, num_hid*2, num_hid, num_classes]
+      self.walk1 = mixWeightNN((self.walkPortionDimensions[0], self.walkPortionDimensions[1]), num_experts, "relu")
       self.walkD1 = layers.Dropout(0.1)
-      self.walk2 = layers.Dense(num_hid*2, activation='relu')
+      self.walk2 = mixWeightNN((self.walkPortionDimensions[1], self.walkPortionDimensions[2]), num_experts, "relu")
       self.walkD2 = layers.Dropout(0.1)
-      self.walk3 = layers.Dense(num_hid, activation='relu')
+      self.walk3 = mixWeightNN((self.walkPortionDimensions[2], self.walkPortionDimensions[3]), num_experts, "relu")
       self.walkD3 = layers.Dropout(0.1)
-      self.walk4 = layers.Dense(num_hid)
-      self.walk5 = layers.Dense(num_classes, name="intial_human")  #63  54  54+63-3=114
+      self.walk4 = mixWeightNN((self.walkPortionDimensions[3], self.walkPortionDimensions[4]), num_experts, "relu")
+      self.walk5 = mixWeightNN((self.walkPortionDimensions[4], self.walkPortionDimensions[5]), num_experts, None)
 
   def getExpertWeights(self, inputs):
     
@@ -45,15 +68,15 @@ class walkGenerateNet(keras.Model):
     s1 = self.gate5(s1)
     return s1
   
-  def getWalkInfo(self, inputs):
-    s2 = self.walk1(inputs)
+  def getWalkInfo(self, inputs, expert_weights):
+    s2 = self.walk1(inputs, expert_weights)
     s2 = self.walkD1(s2)
-    s2 = self.walk2(s2)
+    s2 = self.walk2(s2, expert_weights)
     s2 = self.walkD2(s2)
-    s2 = self.walk3(s2)
+    s2 = self.walk3(s2, expert_weights)
     s2 = self.walkD3(s2)
-    s2 = self.walk4(s2)
-    s2 = self.walk5(s2)
+    s2 = self.walk4(s2, expert_weights)
+    s2 = self.walk5(s2, expert_weights)
     return s2
 
   def getObjCenterInfo(self, batch_size, source):
@@ -61,15 +84,9 @@ class walkGenerateNet(keras.Model):
     obj_center = tf.reduce_mean(obj_pos, axis=-2)
     return obj_center[:, :, :]
   
-  def getWalkLayersInitWeights(self):
-    results = []
-    w_shape = self.walk1.get_weights()
-    print(w_shape)
 
   def call(self, inputs):
     print("in call")
-    flattenedInput = self.flattenInit(inputs)
-    
     
     #source = inputs[0]  #obj
     #target = inputs[1]  #h
@@ -80,9 +97,12 @@ class walkGenerateNet(keras.Model):
 
         lastHuman = result[:, -1, :]
 
+        flattenedInput = self.flattenInit(lastHuman)
+
         #do the weight mixing
-        
-        current_result = self.getWalkInfo(lastHuman)
+        expert_weights = self.getExpertWeights(flattenedInput)
+
+        current_result = self.getWalkInfo(lastHuman, expert_weights)
         current_result = tf.expand_dims(current_result, axis=1)
         result = tf.concat([result, current_result], axis = 1)
     return result
@@ -103,14 +123,12 @@ class walkGenerateNet(keras.Model):
     return {m.name: m.result() for m in self.metrics}
 
   def test_step(self, batch):
-    source, target = batch
-    target = tf.dtypes.cast(target, tf.float32)
-    source = tf.dtypes.cast(source, tf.float32)
-    y_initalPos = target[:, 0, :]
-    y = target[:, :, :]
+    x, y = batch
+    x = tf.dtypes.cast(x, tf.float32)
+    y = tf.dtypes.cast(y, tf.float32)
 
-    preds, initalPos = self([source, target], training=False)
-    self.compiled_metrics.update_state(y_true={"final_result": y, "intial_human":y_initalPos}, y_pred={"final_result":preds, "intial_human":initalPos})
+    preds, initalPos = self(x, training=False)
+    self.compiled_metrics.update_state(y_true={"final_result": y}, y_pred={"final_result":preds})
     return {m.name: m.result() for m in self.metrics}
   
   def generate(self, testX):
@@ -130,5 +148,3 @@ class walkGenerateNet(keras.Model):
 
 
 testModel = walkGenerateNet()
-testModel.build(input_shape = (4, 9*3))
-testModel.getWalkLayersInitWeights()

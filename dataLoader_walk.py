@@ -132,6 +132,7 @@ class trainDataLoader:
         print("loading files from")
         files = []
         playSpeedFactor = 1
+        legRelatedPoints = [13, 14, 15, 19, 16, 17, 18, 20]
         for pathName in pathNames:
             print(pathName)
             files += glob.glob(pathName)
@@ -165,17 +166,20 @@ class trainDataLoader:
                     #[1,0,0], worldCenter->boxCenter
                     
 
-                    wc_bc = np.array(dataList[2][start][:3]) - worldCenter
+                    #wc_bc = np.array(dataList[2][start][:3]) - worldCenter
+                    wc_bc = np.array(dataList[0][start][16*3:16*3+3]) - np.array(dataList[0][start][13*3:13*3+3])                   
                     #wc_bc = np.mean(np.array(dataList[3][start])) - worldCenter
                     
                     wc_bc[1] = 0.0
-                    wc_bc = np.array([wc_bc, [0,1,0]])
-                    adj_rot = R.match_vectors(np.array([[1,0,0], [0,1,0]]), wc_bc)[0]
+                    wc_bc = wc_bc / np.linalg.norm(wc_bc)
+                    wc_bc = np.array([[0,1,0], wc_bc])
+                    adj_rot = R.match_vectors(np.array([[0,1,0], [0,0,1]]), wc_bc)[0]
                     print(adj_rot.as_euler("xyz", degrees=True))
 
                     dataFrameCount = 0
 
                     for i in range(start, end, step):
+                        #i += step
                         dataFrameCount += 1
                         if dataFrameCount > self.maxLen:
                             break
@@ -206,7 +210,21 @@ class trainDataLoader:
                             rotAngles = rot.as_euler("xyz")
                             bodyWhole.append(rotAngles)
                         bodyWhole = np.array(bodyWhole).reshape((humanDimension2))
-                        bodyWhole = np.concatenate((bodyWhole, bodyWholePos[1:, :].reshape((humanDimension1))))
+                        #bodyWhole = np.concatenate((bodyWhole, bodyWholePos[1:, :].reshape((humanDimension1))))
+                        
+                        #get the direction control vec
+                        bodyCenterNext = adj_rot.apply(np.array(dataList[0][i+step][:3]) - worldCenter)
+                        controlVector = bodyCenterNext - bodyCenter
+                        controlVector = np.array([controlVector[0], controlVector[2]])
+                        
+                        #get the phase
+                        leftToe = adj_rot.apply(np.array(dataList[0][i][15*3:15*3+3]) - worldCenter)
+                        rightToe = adj_rot.apply(np.array(dataList[0][i][18*3:18*3+3]) - worldCenter)
+                        leftVec = np.array(dataList[0][start][16*3:16*3+3]) - np.array(dataList[0][start][13*3:13*3+3]) 
+                        frontVec = np.cross(leftVec, np.array([.0, 1.0, .0]))
+                        diffTwoToe = np.dot((leftToe - rightToe), frontVec)
+                        print("look here   " + str(i))
+                        print(diffTwoToe)
                         
 
                         #bodyWhole = bodyWhole.reshape((humanDimension2 + humanDimension1))
