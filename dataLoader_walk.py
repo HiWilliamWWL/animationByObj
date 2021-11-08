@@ -140,6 +140,7 @@ class trainDataLoader:
             files = files[:num_files]
         for f in files:
             print(f)
+            thisFileLegDis = []
             def handleSingleFile(start, end, step):
                 with open(f, 'rb') as pickle_file:
                     dataList = pickle.load(pickle_file)[0]
@@ -174,7 +175,7 @@ class trainDataLoader:
                     wc_bc = wc_bc / np.linalg.norm(wc_bc)
                     wc_bc = np.array([[0,1,0], wc_bc])
                     adj_rot = R.match_vectors(np.array([[0,1,0], [0,0,1]]), wc_bc)[0]
-                    print(adj_rot.as_euler("xyz", degrees=True))
+                    #print(adj_rot.as_euler("xyz", degrees=True))
 
                     dataFrameCount = 0
 
@@ -210,7 +211,7 @@ class trainDataLoader:
                             rotAngles = rot.as_euler("xyz")
                             bodyWhole.append(rotAngles)
                         bodyWhole = np.array(bodyWhole).reshape((humanDimension2))
-                        #bodyWhole = np.concatenate((bodyWhole, bodyWholePos[1:, :].reshape((humanDimension1))))
+                        bodyWhole = np.concatenate((bodyWhole, bodyWholePos[1:, :].reshape((humanDimension1))))
                         
                         #get the direction control vec
                         bodyCenterNext = adj_rot.apply(np.array(dataList[0][i+step][:3]) - worldCenter)
@@ -220,11 +221,10 @@ class trainDataLoader:
                         #get the phase
                         leftToe = adj_rot.apply(np.array(dataList[0][i][15*3:15*3+3]) - worldCenter)
                         rightToe = adj_rot.apply(np.array(dataList[0][i][18*3:18*3+3]) - worldCenter)
-                        leftVec = np.array(dataList[0][start][16*3:16*3+3]) - np.array(dataList[0][start][13*3:13*3+3]) 
-                        frontVec = np.cross(leftVec, np.array([.0, 1.0, .0]))
+                        rightVec = np.array(dataList[0][start][16*3:16*3+3]) - np.array(dataList[0][start][13*3:13*3+3]) 
+                        frontVec = np.cross(-1.0 * rightVec, np.array([.0, 1.0, .0]))
                         diffTwoToe = np.dot((leftToe - rightToe), frontVec)
-                        print("look here   " + str(i))
-                        print(diffTwoToe)
+                        thisFileLegDis.append(diffTwoToe)
                         
 
                         #bodyWhole = bodyWhole.reshape((humanDimension2 + humanDimension1))
@@ -238,6 +238,57 @@ class trainDataLoader:
 
                         objMarkers = adj_rot.apply(np.array(dataList[3][i]) - worldCenter)
                         markerPos.append(objMarkers.reshape((12*3)))
+                delta_phase = [0]
+                tail_point = 0
+                countTemp = 0
+                for phase in range(1, len(thisFileLegDis) - 1):
+                    deltaHere = thisFileLegDis[phase] - thisFileLegDis[phase - 1]
+                    if abs(deltaHere) < 0.0001:
+                        delta_phase.append(0.0)
+                        tail_point = phase
+                        countTemp = 0
+                    elif thisFileLegDis[phase - 1] > thisFileLegDis[phase] and thisFileLegDis[phase + 1] > thisFileLegDis[phase]:
+                        temp = np.linspace(-0.07, -0.95, num = countTemp+1)
+                        for tt in temp:
+                            delta_phase.append(tt)
+                        tail_point = phase
+                        delta_phase.append(-1.0)
+                        print(delta_phase)
+                        print()
+                        countTemp = 0
+                        
+                    elif thisFileLegDis[phase - 1] < thisFileLegDis[phase] and thisFileLegDis[phase + 1] < thisFileLegDis[phase]:
+                        temp = np.linspace(0.07, 0.95, num = countTemp+1)
+                        for tt in temp:
+                            delta_phase.append(tt)
+                        tail_point = phase
+                        delta_phase.append(1.0)
+                        print(delta_phase)
+                        print()
+                        countTemp = 0
+                    elif (thisFileLegDis[phase - 1] > 0 and thisFileLegDis[phase] < 0) :
+                        temp = np.linspace(0.95, 0.07, num = countTemp+1)
+                        for tt in temp:
+                            delta_phase.append(tt)
+                        tail_point = phase
+                        delta_phase.append(0.0)
+                        print(delta_phase)
+                        print()
+                        countTemp = 0
+                    elif (thisFileLegDis[phase - 1] < 0 and thisFileLegDis[phase] > 0):
+                        temp = np.linspace( -0.95, -0.07,num = countTemp+1)
+                        for tt in temp:
+                            delta_phase.append(tt)
+                        tail_point = phase
+                        delta_phase.append(0.0)
+                        print(delta_phase)
+                        print()
+                        countTemp = 0
+                    else:
+                        countTemp += 1
+                print(delta_phase)
+                print(len(delta_phase))
+                exit()
 
                 self.skeletonData.append(np.array(bodyData))
                 self.objectPosData.append(np.array(rigidPos))
