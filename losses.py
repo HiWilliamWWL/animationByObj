@@ -170,6 +170,14 @@ def maskMSE(yTrue, yPred):
   yPred_m = tf.boolean_mask(yPred, mask)
   return tf.keras.losses.MSE(yTrue_m, yPred_m)
 
+def basicMSE(yTrue, yPred):
+  mse = tf.keras.losses.MSE(yTrue, yPred)
+  return mse
+
+def basicMSE_metric(yTrue, yPred):
+  mse = tf.keras.losses.MSE(yTrue, yPred)
+  return mse
+
 def maskLabelLoss_angles(yTrue, yPred):
   obj_center = None
   obj_center_allSeq = None

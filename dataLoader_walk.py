@@ -29,10 +29,13 @@ startEnd = {"t1":[352], "t2":[320], "t3":[388], "t4":[257], "t5":[212], "t6":[28
             "box5_p1":[78], "box5_p2":[81], "box5_p3":[84]}
 
 
-humanDimension = 63
-humanDimension1 = 60
-humanDimension2 = 3+17*3
-objDimention = 36
+humanDimension_pos = 20 * 3
+humanDimension_rot = 21 * 6 
+
+humanDimension = 3 + humanDimension_rot + humanDimension_pos  #global trans + all rots + joint trans = 3+126+60 = 189
+humanDimensionWalk = 1+2+3+6+6*8+3*8
+humanDimensionWalkOutput = humanDimensionWalk - 3
+objDimention = 83 * 2  #36  fake now
 
 
 
@@ -64,7 +67,7 @@ class trainDataLoader:
         self.pose_mean_init = None
         self.pose_cov_inv_init = None
 
-        self.flipData = True
+        self.flipData = False
         self.useRotation = True
 
         self.obj_mean_saved = 0.20327034346397518
@@ -83,10 +86,10 @@ class trainDataLoader:
         self.obj_mean = np.mean(temp_obj)
         self.obj_std = np.std(temp_obj)
 
-        temp_ppl_a = np.array(self.skeleton_data)[:, :, 3:17*3].flatten()
-        self.ppl_mean_a = np.mean(temp_ppl_a)
-        self.ppl_std_a = np.std(temp_ppl_a)
-        temp_ppl_p = np.array(self.skeleton_data)[:, :, 3+17*3:].flatten()
+        #temp_ppl_a = np.array(self.skeleton_data)[:, :, 3:17*3].flatten()
+        #self.ppl_mean_a = np.mean(temp_ppl_a)
+        #self.ppl_std_a = np.std(temp_ppl_a)
+        temp_ppl_p = np.array(self.skeleton_data)[:, :, -24:].flatten()
         self.ppl_mean_p = np.mean(temp_ppl_p)
         self.ppl_std_p = np.std(temp_ppl_p)
         #temp_obj = (temp_obj - self.obj_mean) / self.obj_std
@@ -140,10 +143,11 @@ class trainDataLoader:
             files = files[:num_files]
         for f in files:
             print(f)
-            thisFileLegDis = []
             def handleSingleFile(start, end, step):
+                thisFileLegDis = []
                 with open(f, 'rb') as pickle_file:
                     dataList = pickle.load(pickle_file)[0]
+                    #print(len(dataList[0]))
 
                     
                     if "box5" in f:
@@ -202,16 +206,20 @@ class trainDataLoader:
 
                         #bodyWhole = np.concatenate((centerDistant.reshape((1,3)), bodyWhole), axis=0)
                         JI = JointsInfo(bodyWholePos)
-                        allRots = JI.get_parent_17_rots()
+                        allRots = JI.get_all_rots_vecs()
                         if self.saved_Tpose is None and i > end - 10:
                             self.saved_Tpose = JI.generate_standard_Tpose_from_this_bone_length()
 
                         bodyWhole = [bodyCenter]
-                        for rot in allRots:
-                            rotAngles = rot.as_euler("xyz")
-                            bodyWhole.append(rotAngles)
-                        bodyWhole = np.array(bodyWhole).reshape((humanDimension2))
-                        bodyWhole = np.concatenate((bodyWhole, bodyWholePos[1:, :].reshape((humanDimension1))))
+                        for rotI, rot in enumerate(allRots):
+                            if rotI not in legRelatedPoints and rotI is not 0:
+                                continue
+                            bodyWhole.append(rot[0])  
+                            bodyWhole.append(rot[1])#21 * 6 = 126
+                        bodyWalkPos = bodyWholePos[legRelatedPoints]
+                        
+                        bodyWhole = np.array(bodyWhole).flatten()
+                        bodyWhole = np.concatenate((bodyWhole, bodyWalkPos.flatten()))
                         
                         #get the direction control vec
                         bodyCenterNext = adj_rot.apply(np.array(dataList[0][i+step][:3]) - worldCenter)
@@ -225,6 +233,7 @@ class trainDataLoader:
                         frontVec = np.cross(-1.0 * rightVec, np.array([.0, 1.0, .0]))
                         diffTwoToe = np.dot((leftToe - rightToe), frontVec)
                         thisFileLegDis.append(diffTwoToe)
+                        bodyWhole = np.concatenate((controlVector, bodyWhole))
                         
 
                         #bodyWhole = bodyWhole.reshape((humanDimension2 + humanDimension1))
@@ -238,68 +247,99 @@ class trainDataLoader:
 
                         objMarkers = adj_rot.apply(np.array(dataList[3][i]) - worldCenter)
                         markerPos.append(objMarkers.reshape((12*3)))
-                delta_phase = [0]
-                tail_point = 0
+                delta_phase = []
                 countTemp = 0
-                for phase in range(1, len(thisFileLegDis) - 1):
-                    deltaHere = thisFileLegDis[phase] - thisFileLegDis[phase - 1]
-                    if abs(deltaHere) < 0.0001:
+                for phase in range(0, len(thisFileLegDis) - 1):
+                    deltaHere = 0.0
+                    if phase == 0:
+                        deltaHere = thisFileLegDis[phase + 1] - thisFileLegDis[phase]
+                        if abs(deltaHere) < 0.0001 and abs(thisFileLegDis[phase]) < 0.03:
+                            delta_phase.append(0.0)
+                            countTemp = 0
+                        else:
+                            countTemp += 1
+                        continue
+                    else:
+                        deltaHere = thisFileLegDis[phase] - thisFileLegDis[phase - 1]
+                    if abs(deltaHere) < 0.0001 and abs(thisFileLegDis[phase]) < 0.03:
                         delta_phase.append(0.0)
-                        tail_point = phase
                         countTemp = 0
                     elif thisFileLegDis[phase - 1] > thisFileLegDis[phase] and thisFileLegDis[phase + 1] > thisFileLegDis[phase]:
-                        temp = np.linspace(-0.07, -0.95, num = countTemp+1)
+                        temp = np.linspace(-0.07, -0.95, num = countTemp)
                         for tt in temp:
                             delta_phase.append(tt)
-                        tail_point = phase
                         delta_phase.append(-1.0)
-                        print(delta_phase)
-                        print()
                         countTemp = 0
                         
                     elif thisFileLegDis[phase - 1] < thisFileLegDis[phase] and thisFileLegDis[phase + 1] < thisFileLegDis[phase]:
-                        temp = np.linspace(0.07, 0.95, num = countTemp+1)
+                        temp = np.linspace(0.07, 0.95, num = countTemp)
                         for tt in temp:
                             delta_phase.append(tt)
-                        tail_point = phase
                         delta_phase.append(1.0)
-                        print(delta_phase)
-                        print()
                         countTemp = 0
                     elif (thisFileLegDis[phase - 1] > 0 and thisFileLegDis[phase] < 0) :
-                        temp = np.linspace(0.95, 0.07, num = countTemp+1)
+                        temp = np.linspace(0.95, 0.07, num = countTemp)
                         for tt in temp:
                             delta_phase.append(tt)
-                        tail_point = phase
                         delta_phase.append(0.0)
-                        print(delta_phase)
-                        print()
                         countTemp = 0
                     elif (thisFileLegDis[phase - 1] < 0 and thisFileLegDis[phase] > 0):
-                        temp = np.linspace( -0.95, -0.07,num = countTemp+1)
+                        temp = np.linspace( -0.95, -0.07,num = countTemp)
                         for tt in temp:
                             delta_phase.append(tt)
-                        tail_point = phase
                         delta_phase.append(0.0)
-                        print(delta_phase)
-                        print()
                         countTemp = 0
                     else:
                         countTemp += 1
-                print(delta_phase)
+                countTemp += 1
+                if thisFileLegDis[-1] < 0:
+                    if delta_phase[-1] < -0.999:
+                        temp = np.linspace( -0.95, -0.92+0.07 * countTemp,num = countTemp)
+                        for tt in temp:
+                            delta_phase.append(tt)
+                    else:
+                        temp = np.linspace( -0.07, -0.09 + -0.06 * countTemp,num = countTemp)
+                        for tt in temp:
+                            delta_phase.append(tt)
+                elif thisFileLegDis[-1] > 0:
+                    if delta_phase[-1] > 0.999:
+                        temp = np.linspace( 0.95, 0.93-0.07 * countTemp,num = countTemp)
+                        for tt in temp:
+                            delta_phase.append(tt)
+                    else:
+                        temp = np.linspace( 0.07, 0.09 + 0.06 * countTemp,num = countTemp)
+                        for tt in temp:
+                            delta_phase.append(tt)
                 print(len(delta_phase))
-                exit()
-
-                self.skeletonData.append(np.array(bodyData))
+                phase_angle = np.array(delta_phase) * 3.14159265359
+                phase_angle_sin = np.sin(phase_angle)
+                phase_angle_cos = np.cos(phase_angle)
+                bodyDataSave = np.array(bodyData).copy()   # (85, 83)?
+                bodyData = np.concatenate(( np.array(delta_phase).reshape(85, 1), np.array(bodyData)), axis=1)
+                self.skeletonData.append(bodyData)
                 self.objectPosData.append(np.array(rigidPos))
-                self.objectMarkerData.append(np.array(markerPos))
-                seqLength = len(bodyData)
 
-                self.shapes[0].append([seqLength, 6])
-                self.shapes[1].append([seqLength, humanDimension2])
+                markerPos1 = np.einsum("a,ab->ab", phase_angle_sin, bodyDataSave)
+                markerPos2 = np.einsum("a,ab->ab", phase_angle_cos, bodyDataSave)
+                markerPos = np.concatenate((markerPos1, markerPos2), axis=-1)
+                self.objectMarkerData.append(np.array(markerPos))
+
+                #seqLength = len(bodyData)
+
+                #self.shapes[0].append([seqLength, 6])
+                #self.shapes[1].append([seqLength, humanDimension2])
             
-            if "walk" in f:
-                handleSingleFile(0, 5*85, 5)
+            if "walk" in f or "tina_box2_w_" in f:
+                handleSingleFile(1, 4*85, 4)
+                handleSingleFile(2, 4*85, 4)
+                handleSingleFile(3, 4*85, 4)
+                if "wwl" in f:
+                    handleSingleFile(85*4+1, 85*4+1+4*85, 4)
+                    handleSingleFile(3, 4+5*85, 5)
+                    handleSingleFile(4, 4+5*85, 5)
+                else:
+                    handleSingleFile(3, 3+5*85, 5)
+                    handleSingleFile(4, 3+5*85, 5)
                 #handleSingleFile(2*85, 2*85*2, 2)
             else:
                 start = 0
@@ -317,7 +357,7 @@ class trainDataLoader:
         max_length = self.maxLen  #130
 
         for file_count in range(len(self.skeletonData)):
-            pos_zeros = np.zeros((max_length, humanDimension2 + humanDimension1))
+            pos_zeros = np.zeros((max_length, humanDimensionWalk))
             obj_zeros = np.zeros((max_length, objDimention))
             #inital_pos = np.array(skeletonPart[file_count][0]).astype(dt)
             #delta_pos = (np.array(skeletonPart[file_count][1:]).astype(dt) - inital_pos)
@@ -329,11 +369,13 @@ class trainDataLoader:
             pos_zeros[:pos_whole.shape[0],:pos_whole.shape[1]] = pos_whole
             obj_zeros[:obj_whole.shape[0],:obj_whole.shape[1]] = obj_whole
 
+            #pos_zeros = pos_zeros[:, 3:] #remove
+
             self.obj_data.append(obj_zeros)
             self.skeleton_data.append(pos_zeros)
 
             if self.flipData:
-                pos_zeros = np.zeros((max_length, humanDimension2 + humanDimension1))
+                pos_zeros = np.zeros((max_length, humanDimensionWalk))
                 obj_zeros = np.zeros((max_length, objDimention))
                 pos_whole = np.array(skeletonPart[file_count][:]).astype(dt)
                 obj_whole = np.array(objPart[file_count][:]).astype(dt)
@@ -361,31 +403,10 @@ class trainDataLoader:
 
         self.updateNorm()
         save_file_num = 0
+        write_mode = 0  #0->None 1->pose 2->angles
         for i in range(len(self.obj_data)):
-            #self.obj_data[i] = (self.obj_data[i] - self.pos_mean) / self.pos_std
-            #self.skeleton_data[i][0, :] = (self.skeleton_data[i][0, :] - self.pos_mean) / self.pos_std
-            #self.skeleton_data[i] = (self.skeleton_data[i] - self.ppl_mean) / ( self.ppl_std)
-            #self.skeleton_data[i][:, 3:] = self.skeleton_data[i][:, 3:] / self.ppl_std
-            self.skeleton_data[i][:, 3:17*3] = self.skeleton_data[i][:, 3:17*3] / 3.1415926536
-            self.skeleton_data[i][:, 3+17*3:] = (self.skeleton_data[i][:, 3+17*3:] - self.ppl_mean_p) / self.ppl_std_p
+            self.skeleton_data[i][:, -24:] = (self.skeleton_data[i][:, -24:] - self.ppl_mean_p) / self.ppl_std_p
             self.obj_data[i] = (self.obj_data[i] - self.obj_mean) / self.obj_std 
-            #self.skeleton_data[i] *= 5.0
-            #print(self.skeleton_data[i][:5])
-            if i == save_file_num and True:
-                with open("./Tests/data_load_test/testResult_a.pb", 'wb') as pickle_file:
-                    thisFileSkeleton = self.skeleton_data[i][:, :]
-                    #thisFileSkeleton[:, 3:3+60] = self.skeleton_data[i][:, 3+17*3:] * self.ppl_std_saved_p + self.ppl_mean_saved_a
-                    thisFileSkeleton[:, 3:3+60] = self.skeleton_data[i][:, 3+17*3:] * self.ppl_std_p + self.ppl_mean_p
-                    #thisFileSkeleton = thisFileSkeleton[:, :63].tolist()
-                    thisFileSkeleton = thisFileSkeleton[:, :63].reshape(-1, 21, 3)
-                    for ii in range(20):
-                        thisFileSkeleton[:, 1+ii] = thisFileSkeleton[:, 1+ii] + thisFileSkeleton[:, 0]
-
-                    #thisFileObj = self.obj_data[i][:, :] * self.obj_std_saved + self.obj_mean_saved
-                    thisFileObj = self.obj_data[i][:, :] * self.obj_std + self.obj_mean
-                    #thisFileObj = thisFileObj.tolist()
-                    dataList = pickle.dump([thisFileSkeleton.reshape(-1, 63), thisFileObj], pickle_file)
-                    print("finish writing temp file")
         #exit()
         '''
         newOrder = [x for x in range(len(self.obj_data))]
@@ -421,6 +442,6 @@ class trainDataLoader:
         return x,y
 
 
-t = trainDataLoader(num_files = 1, pathNames = ["./Data/walkData/*.data"])
+#t = trainDataLoader(num_files = None, pathNames = ["./Data/walkData/*.data"])
 #t = trainDataLoader()
-t.getDataset3()
+#t.getDataset3()

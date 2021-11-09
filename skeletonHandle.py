@@ -204,6 +204,25 @@ class JointsInfo:
         
         operate_FK(self.all_joints[0])
     
+    def forward_kinematics_Legs_vecs(self, applyRots):
+        #applyRots ndarray->shape=(9,6)
+        legJointsNo = [0, 13, 14, 15, 19, 16, 17, 18, 20]
+        rotsMap = {0:0, 13:1, 14:2, 15:3, 16:4, 17:5, 18:6, 19:7, 20:8}
+        def operate_FK(current_joint):
+            if current_joint.num in legJointsNo:
+                rotVec_y = applyRots[rotsMap[current_joint.num]][:3]
+                rotVec_z = applyRots[rotsMap[current_joint.num]][3:]
+                rotVec_x = np.cross(rotVec_y, rotVec_z)
+                rotVec_x = rotVec_x / np.linalg.norm(rotVec_x)
+                rotVec = np.concatenate((rotVec_x, rotVec_y, rotVec_z)).reshape((3,3))
+                currentRotation = Rot.from_matrix(rotVec).inv()
+
+                current_joint.apply_rot(currentRotation)
+            for child in current_joint.children:
+                operate_FK(child)
+        
+        operate_FK(self.all_joints[0])
+    
     def forward_kinematics_parentsOnly_17Joints(self, applyRots):
         # applyRots  17*R   Note: J_4=J_3  J7=J8   J19=J15  J20=J18 in orignal No.
         #           0 1 2 3 4 5 6 7 8 9 T 1 12 13 14 15 16 17 18 19 20

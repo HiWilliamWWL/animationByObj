@@ -3,7 +3,7 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import numpy as np
 
-batch_size = 4
+batch_size = 2
 '''
     startingPose Generate: Obj85->H1
     Generative: Obj2, H1 -> H1
@@ -20,8 +20,8 @@ class mixWeightNN(layers.Layer):
   
 
   def call(self, x, expert_weights):
-    current_weight = tf.einsum("e,emn->mn", expert_weights, self.all_weights)
-    result = tf.einsum("mn, bm -> bn", current_weight, x) + self.thisBias
+    current_weight = tf.einsum("be,emn->bmn", expert_weights, self.all_weights)
+    result = tf.einsum("bmn, bm -> bn", current_weight, x) + self.thisBias
     if self.activationLayer is not None:
       result = self.activationLayer(result)
     return result
@@ -44,7 +44,8 @@ class walkGenerateNet(keras.Model):
       self.gate3 = layers.Dense(num_hid, activation='relu')
       self.gateD3 = layers.Dropout(0.1)
       self.gate4 = layers.Dense(num_hid)
-      self.gate5 = layers.Dense(num_experts, name="expert_weights", activation='softmax')  #63  54  54+63-3=114
+      #self.gate5 = layers.Dense(num_experts, name="expert_weights", activation='softmax')  #63  54  54+63-3=114
+      self.gate5 = layers.Dense(num_classes, name="expert_weights", activation='softmax')
 
       self.walkPortionDimensions = [num_input_dimension, num_hid*4, num_hid*2, num_hid*2, num_hid, num_classes]
       self.walk1 = mixWeightNN((self.walkPortionDimensions[0], self.walkPortionDimensions[1]), num_experts, "relu")
@@ -91,60 +92,65 @@ class walkGenerateNet(keras.Model):
     #source = inputs[0]  #obj
     #target = inputs[1]  #h
     
-    result = tf.expand_dims(inputs, axis=1)
+    result = None
 
-    for i in range(1, self.target_maxlen):
+    for i in range(0, self.target_maxlen ):
 
-        lastHuman = result[:, -1, :]
+        #currentInput = tf.concat((inputs[:, i, :3], result[:, -1, :]), axis=-1)
+        currentInput = inputs[:, i, :]
 
-        flattenedInput = self.flattenInit(lastHuman)
+        flattenedInput = self.flattenInit(currentInput)
 
         #do the weight mixing
         expert_weights = self.getExpertWeights(flattenedInput)
 
-        current_result = self.getWalkInfo(lastHuman, expert_weights)
+        current_result = expert_weights
+        #current_result = self.getWalkInfo(flattenedInput, expert_weights)
+
         current_result = tf.expand_dims(current_result, axis=1)
-        result = tf.concat([result, current_result], axis = 1)
+        if result is None:
+          result = current_result
+        else:
+          result = tf.concat([result, current_result], axis = 1)
     return result
+    
   
   def train_step(self, batch):
     x, y = batch
     x = tf.dtypes.cast(x, tf.float32)
-    y = tf.dtypes.cast(y, tf.float32)
+    y = tf.dtypes.cast(y, tf.float32)  # (b, 85, 84)
+    #x = tf.identity(y)
     #obj_center = self.getObjCenterInfo(batch_size, source)
     #y = tf.concat((target, obj_center), axis = -1)
     with tf.GradientTape() as tape:
       y_p = self(x, training=True)
-      loss = self.compiled_loss(y_true={"final_result": y}, y_pred={"final_result":y_p})
+      loss = self.compiled_loss(y_true=y[:, 1:, 3:], y_pred=y_p[:, 1:, :])
     trainable_vars = self.trainable_variables
     gradients = tape.gradient(loss, trainable_vars)
     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-    self.compiled_metrics.update_state(y_true={"final_result": y}, y_pred={"final_result":y_p})
+    self.compiled_metrics.update_state(y_true=y[:, 1:, 3:], y_pred=y_p[:, 1:, :])
     return {m.name: m.result() for m in self.metrics}
 
   def test_step(self, batch):
     x, y = batch
     x = tf.dtypes.cast(x, tf.float32)
     y = tf.dtypes.cast(y, tf.float32)
+    #x = tf.identity(y)
 
-    preds, initalPos = self(x, training=False)
-    self.compiled_metrics.update_state(y_true={"final_result": y}, y_pred={"final_result":preds})
+    preds = self(x, training=False)
+    self.compiled_metrics.update_state(y_true=y[:, 1:, 3:], y_pred=preds[:, 1:, :])
     return {m.name: m.result() for m in self.metrics}
   
   def generate(self, testX):
-    source = testX
-    initialPos = self.getInitialPos(source)
-    result = tf.expand_dims(initialPos, axis=1)
+    # 1, 84
+    flattenedInput = self.flattenInit(testX)
 
-    for i in range(1, self.target_maxlen):
-      lastObj = source[:, i-1, :]
-      currentObj = source[:, i, :]
-      lastHuman = result[:, -1, :]
-      inputFeature = tf.concat([lastObj, currentObj, lastHuman], axis=-1)
-      current_result = self.getFollowingPos(inputFeature)
-      current_result = tf.expand_dims(current_result, axis=1)
-      result = tf.concat([result, current_result], axis = 1)
-    return result
+    #do the weight mixing
+    expert_weights = self.getExpertWeights(flattenedInput)
+
+    #current_result = expert_weights
+    #current_result = self.getWalkInfo(flattenedInput, expert_weights)
+    return expert_weights
 
 
-testModel = walkGenerateNet()
+#testModel = walkGenerateNet()
