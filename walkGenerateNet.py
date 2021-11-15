@@ -117,9 +117,9 @@ class walkGenerateNet(keras.Model):
   
   def train_step(self, batch):
     x, y = batch
-    x = tf.dtypes.cast(x, tf.float32)
+    #x = tf.dtypes.cast(x, tf.float32)
     y = tf.dtypes.cast(y, tf.float32)  # (b, 85, 84)
-    #x = tf.identity(y)
+    x = tf.identity(y)
     #obj_center = self.getObjCenterInfo(batch_size, source)
     #y = tf.concat((target, obj_center), axis = -1)
     with tf.GradientTape() as tape:
@@ -133,9 +133,9 @@ class walkGenerateNet(keras.Model):
 
   def test_step(self, batch):
     x, y = batch
-    x = tf.dtypes.cast(x, tf.float32)
+    #x = tf.dtypes.cast(x, tf.float32)
     y = tf.dtypes.cast(y, tf.float32)
-    #x = tf.identity(y)
+    x = tf.identity(y)
 
     preds = self(x, training=False)
     self.compiled_metrics.update_state(y_true=y[:, 1:, 3:], y_pred=preds[:, 1:, :])

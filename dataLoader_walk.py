@@ -67,6 +67,9 @@ class trainDataLoader:
         self.pose_mean_init = None
         self.pose_cov_inv_init = None
 
+        self.wholeMean = 0.0
+        self.wholeStd = 0.0
+
         self.flipData = False
         self.useRotation = True
 
@@ -94,6 +97,9 @@ class trainDataLoader:
         self.ppl_std_p = np.std(temp_ppl_p)
         #temp_obj = (temp_obj - self.obj_mean) / self.obj_std
         #temp_obj /= 3.14159265
+        temp_whole = np.array(self.skeleton_data)[:, :, :].flatten()
+        self.wholeMean = np.mean(temp_whole)
+        self.wholeStd = np.std(temp_whole)
         
         #plt.plot(temp_obj)
         #plt.show()
@@ -251,6 +257,11 @@ class trainDataLoader:
                 countTemp = 0
                 for phase in range(0, len(thisFileLegDis) - 1):
                     deltaHere = 0.0
+                    if phase != countTemp + len(delta_phase):
+                        print(phase)
+                        print(countTemp)
+                        print(delta_phase)
+                        exit()
                     if phase == 0:
                         deltaHere = thisFileLegDis[phase + 1] - thisFileLegDis[phase]
                         if abs(deltaHere) < 0.0001 and abs(thisFileLegDis[phase]) < 0.03:
@@ -262,6 +273,8 @@ class trainDataLoader:
                     else:
                         deltaHere = thisFileLegDis[phase] - thisFileLegDis[phase - 1]
                     if abs(deltaHere) < 0.0001 and abs(thisFileLegDis[phase]) < 0.03:
+                        for ik in range(countTemp):
+                            delta_phase.append(0.0)
                         delta_phase.append(0.0)
                         countTemp = 0
                     elif thisFileLegDis[phase - 1] > thisFileLegDis[phase] and thisFileLegDis[phase + 1] > thisFileLegDis[phase]:
@@ -333,7 +346,7 @@ class trainDataLoader:
                 handleSingleFile(1, 4*85, 4)
                 handleSingleFile(2, 4*85, 4)
                 handleSingleFile(3, 4*85, 4)
-                if "wwl" in f:
+                if "wwl_board_w_001" in f:
                     handleSingleFile(85*4+1, 85*4+1+4*85, 4)
                     handleSingleFile(3, 4+5*85, 5)
                     handleSingleFile(4, 4+5*85, 5)
@@ -405,7 +418,8 @@ class trainDataLoader:
         save_file_num = 0
         write_mode = 0  #0->None 1->pose 2->angles
         for i in range(len(self.obj_data)):
-            self.skeleton_data[i][:, -24:] = (self.skeleton_data[i][:, -24:] - self.ppl_mean_p) / self.ppl_std_p
+            #self.skeleton_data[i][:, -24:] = (self.skeleton_data[i][:, -24:] - self.ppl_mean_p) / self.ppl_std_p
+            self.skeleton_data[i][:, :] = (self.skeleton_data[i][:, :] - self.wholeMean) / self.wholeStd
             self.obj_data[i] = (self.obj_data[i] - self.obj_mean) / self.obj_std 
         #exit()
         '''
