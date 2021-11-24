@@ -447,7 +447,8 @@ class trainDataLoader:
             print(self.ppl_std_a)
             print(self.ppl_mean_p)
             print(self.ppl_std_p)
-        dataset = tf.data.Dataset.from_tensor_slices((self.obj_data, self.skeleton_data))
+        #dataset = tf.data.Dataset.from_tensor_slices((self.obj_data, self.skeleton_data))
+        dataset = tf.data.Dataset.from_tensor_slices(( self.skeleton_data, self.obj_data))
         return dataset
     
     def getSingleSample(self, file_num):

@@ -3,7 +3,7 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import numpy as np
 
-batch_size = 2
+batch_size = 32
 '''
     startingPose Generate: Obj85->H1
     Generative: Obj2, H1 -> H1
@@ -93,7 +93,11 @@ class walkGenerateNet(keras.Model):
     #target = inputs[1]  #h
     
     result = None
+    flattenedInput = self.flattenInit(inputs)
+    expert_weights = self.getExpertWeights(flattenedInput)
+    current_result = expert_weights
 
+    '''
     for i in range(0, self.target_maxlen ):
 
         #currentInput = tf.concat((inputs[:, i, :3], result[:, -1, :]), axis=-1)
@@ -112,33 +116,37 @@ class walkGenerateNet(keras.Model):
           result = current_result
         else:
           result = tf.concat([result, current_result], axis = 1)
-    return result
+    '''
+    return current_result
     
   
   def train_step(self, batch):
     x, y = batch
-    #x = tf.dtypes.cast(x, tf.float32)
+    print(x.shape)
+    print(y.shape)
+    x = tf.dtypes.cast(x, tf.float32)
     y = tf.dtypes.cast(y, tf.float32)  # (b, 85, 84)
-    x = tf.identity(y)
+    #x = tf.identity(y)
     #obj_center = self.getObjCenterInfo(batch_size, source)
     #y = tf.concat((target, obj_center), axis = -1)
     with tf.GradientTape() as tape:
       y_p = self(x, training=True)
-      loss = self.compiled_loss(y_true=y[:, 1:, 3:], y_pred=y_p[:, 1:, :])
+      loss = self.compiled_loss(y, y_p)
     trainable_vars = self.trainable_variables
     gradients = tape.gradient(loss, trainable_vars)
     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-    self.compiled_metrics.update_state(y_true=y[:, 1:, 3:], y_pred=y_p[:, 1:, :])
+    self.compiled_metrics.update_state(y, y_p)
     return {m.name: m.result() for m in self.metrics}
 
   def test_step(self, batch):
     x, y = batch
-    #x = tf.dtypes.cast(x, tf.float32)
+    x = tf.dtypes.cast(x, tf.float32)
     y = tf.dtypes.cast(y, tf.float32)
-    x = tf.identity(y)
+    #x = tf.identity(y)
 
     preds = self(x, training=False)
-    self.compiled_metrics.update_state(y_true=y[:, 1:, 3:], y_pred=preds[:, 1:, :])
+    #self.compiled_metrics.update_state(y_true=y[:, 1:, 3:], y_pred=preds[:, 1:, :])
+    self.compiled_metrics.update_state(y, preds)
     return {m.name: m.result() for m in self.metrics}
   
   def generate(self, testX):
