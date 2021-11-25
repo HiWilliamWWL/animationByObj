@@ -37,34 +37,34 @@ class walkGenerateNet(keras.Model):
       self.target_maxlen = target_maxlen
 
       self.flattenInit = layers.Flatten()
-      self.gate1 = layers.Dense(num_hid*4, activation='relu')
+      self.gate1 = layers.Dense(num_hid*4, activation='elu')
       self.gateD1 = layers.Dropout(0.1)
-      self.gate2 = layers.Dense(num_hid*2, activation='relu')
+      self.gate2 = layers.Dense(num_hid*2, activation='elu')
       self.gateD2 = layers.Dropout(0.1)
-      self.gate3 = layers.Dense(num_hid, activation='relu')
+      self.gate3 = layers.Dense(num_hid, activation='elu')
       self.gateD3 = layers.Dropout(0.1)
       self.gate4 = layers.Dense(num_hid)
       #self.gate5 = layers.Dense(num_experts, name="expert_weights", activation='softmax')  #63  54  54+63-3=114
-      self.gate5 = layers.Dense(num_classes, name="expert_weights", activation='softmax')
+      self.gate5 = layers.Dense(num_classes, name="expert_weights")
 
       self.walkPortionDimensions = [num_input_dimension, num_hid*4, num_hid*2, num_hid*2, num_hid, num_classes]
-      self.walk1 = mixWeightNN((self.walkPortionDimensions[0], self.walkPortionDimensions[1]), num_experts, "relu")
+      self.walk1 = mixWeightNN((self.walkPortionDimensions[0], self.walkPortionDimensions[1]), num_experts, "elu")
       self.walkD1 = layers.Dropout(0.1)
-      self.walk2 = mixWeightNN((self.walkPortionDimensions[1], self.walkPortionDimensions[2]), num_experts, "relu")
+      self.walk2 = mixWeightNN((self.walkPortionDimensions[1], self.walkPortionDimensions[2]), num_experts, "elu")
       self.walkD2 = layers.Dropout(0.1)
-      self.walk3 = mixWeightNN((self.walkPortionDimensions[2], self.walkPortionDimensions[3]), num_experts, "relu")
+      self.walk3 = mixWeightNN((self.walkPortionDimensions[2], self.walkPortionDimensions[3]), num_experts, "elu")
       self.walkD3 = layers.Dropout(0.1)
-      self.walk4 = mixWeightNN((self.walkPortionDimensions[3], self.walkPortionDimensions[4]), num_experts, "relu")
+      self.walk4 = mixWeightNN((self.walkPortionDimensions[3], self.walkPortionDimensions[4]), num_experts, "elu")
       self.walk5 = mixWeightNN((self.walkPortionDimensions[4], self.walkPortionDimensions[5]), num_experts, None)
 
   def getExpertWeights(self, inputs):
     
     s1 = self.gate1(inputs)
-    s1 = self.gateD1(s1)
+    #s1 = self.gateD1(s1)
     s1 = self.gate2(s1)
-    s1 = self.gateD2(s1)
+    #s1 = self.gateD2(s1)
     s1 = self.gate3(s1)
-    s1 = self.gateD3(s1)
+    #s1 = self.gateD3(s1)
     s1 = self.gate4(s1)
     s1 = self.gate5(s1)
     return s1
@@ -95,8 +95,8 @@ class walkGenerateNet(keras.Model):
     result = None
     flattenedInput = self.flattenInit(inputs)
     expert_weights = self.getExpertWeights(flattenedInput)
+    #current_result = self.getWalkInfo(flattenedInput, expert_weights)
     current_result = expert_weights
-
     '''
     for i in range(0, self.target_maxlen ):
 

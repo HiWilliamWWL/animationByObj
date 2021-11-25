@@ -5,8 +5,9 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
-import dataLoader_walk_seperate as dataLoader
+#import dataLoader_walk_seperate as dataLoader
 #import dataLoader_walk as dataLoader
+import walkAnnotationData
 
 import numpy as np
 import pickle
@@ -17,27 +18,29 @@ import walkGenerateNet as wgn
 max_target_len = 85 #85  35
 
 batch_size = wgn.batch_size
-val_data_num = 256
+val_data_num = 10
 #val_data_num = 3
 
 optimizer = keras.optimizers.Adam(0.001)
 
 print("start loading data!!!")
-loader = dataLoader.trainDataLoader(None, pathNames = ["./Data/walkData/*.data"])
+#loader = dataLoader.trainDataLoader(None, pathNames = ["./Data/walkData/*.data"])
 print("Finished")
 import losses
-losses.loader = loader
+#losses.loader = loader
 losses.batch_size = batch_size
 
 checkPointFolder = './Checkpoints/Checkpoints_wgn1/'
-model = wgn.walkGenerateNet(num_hid=128, target_maxlen=max_target_len, num_classes=dataLoader.humanDimensionWalkOutput, num_experts = 3, num_input_dimension = dataLoader.objDimention)
+#model = wgn.walkGenerateNet(num_hid=128, target_maxlen=max_target_len, num_classes=dataLoader.humanDimensionWalkOutput, num_experts = 3, num_input_dimension = dataLoader.objDimention)
+model = wgn.walkGenerateNet(num_hid=128, target_maxlen=max_target_len, num_classes=28, num_experts = 3, num_input_dimension = 64)
 model.compile(optimizer=optimizer, loss=losses.basicMSE, metrics='mean_squared_error')
 
-full_dataset = loader.getDataset3()
-full_dataset = full_dataset.shuffle(1000, reshuffle_each_iteration=True)
+#full_dataset = loader.getDataset3()
+full_dataset = walkAnnotationData.getData()
+#full_dataset = full_dataset.shuffle(100, reshuffle_each_iteration=True)
 val_dataset = full_dataset.take(val_data_num).batch(batch_size) 
 train_dataset = full_dataset.skip(val_data_num).batch(batch_size)
-train_dataset = train_dataset.shuffle(1000, reshuffle_each_iteration=True)
+#train_dataset = train_dataset.shuffle(100, reshuffle_each_iteration=True)
 
 
 if not os.path.exists(checkPointFolder):
