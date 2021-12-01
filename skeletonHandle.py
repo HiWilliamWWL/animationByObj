@@ -58,17 +58,24 @@ class JointsInfo:
                                     [-0.1736482, 0.984808, .0], [-1.0, .0, .0], [-1.0, .0, .0], [-1.0, .0, .0],
                                     [1.0, .0, .0], [.0, -1.0, .0], [.0, -1.0, .0], [.0, .0, 1.0], 
                                     [-1.0, .0, .0], [.0, -1.0, .0], [.0, -1.0, .0], [.0, .0, 1.0]]
-    def __init__(self, init_joints_poses, global_trans = None):
+    def __init__(self, init_joints_poses, global_trans = None, init_rot = None):
         #init_joints_poses.shape = (21,3) at T_0
-
-        self.connection_map = {}
+        
         self.init_joints_poses = np.array(init_joints_poses)
         self.all_joints = []
-        hip_vec = init_joints_poses[13] - init_joints_poses[16]
+        hip_vec = init_joints_poses[16] - init_joints_poses[13]   #orignal 13 - 16
         hip_vec = hip_vec / np.linalg.norm(hip_vec)
         back_vec = init_joints_poses[1] - init_joints_poses[0]
         back_vec = back_vec / np.linalg.norm(back_vec)
-        self.init_global_rot = Rot.align_vectors(np.array([hip_vec, back_vec]), np.array([[1.0, .0, .0], [.0, 1.0, .0]]))[0]
+        #print()
+        #print(np.array([hip_vec, back_vec, np.cross(hip_vec, back_vec)]))
+        hip_vec = [.0, .0, 1]
+        back_vec = [.0, 1.0, .0]
+        #print(np.array([hip_vec, back_vec, np.cross(hip_vec, back_vec)]))
+        #print()
+        self.init_global_rot = Rot.align_vectors(np.array([hip_vec, back_vec, np.cross(hip_vec, back_vec)]), np.array([[1.0, .0, .0], [.0, 1.0, .0], [.0, .0, 1.0]]))[0]
+        if init_rot is not None:
+            self.init_global_rot = Rot.from_euler("y", init_rot, degrees=True)
         for i in range(21):
             joint = singleJoint(i, self.init_joints_poses[i], self.joints_Tpose_norm)
             self.all_joints.append(joint)
@@ -205,13 +212,33 @@ class JointsInfo:
         operate_FK(self.all_joints[0])
     
     def forward_kinematics_Legs_vecs(self, applyRots):
-        #applyRots ndarray->shape=(9,6)
-        legJointsNo = [0, 13, 14, 15, 19, 16, 17, 18, 20]
-        rotsMap = {0:0, 13:1, 14:2, 15:3, 16:4, 17:5, 18:6, 19:7, 20:8}
+        #applyRots ndarray->shape=(9,6) (8, 6)
+        #legJointsNo = [0, 13, 14, 15, 19, 16, 17, 18, 20]
+        #rotsMap = {0:0, 13:1, 14:2, 15:3, 16:4, 17:5, 18:6, 19:7, 20:8}
+        legJointsNo = [13, 14, 15, 19, 16, 17, 18, 20]
+        rotsMap = { 13:0, 14:1, 15:2, 16:3, 17:4, 18:5, 19:6, 20:7}
         def operate_FK(current_joint):
             if current_joint.num in legJointsNo:
                 rotVec_y = applyRots[rotsMap[current_joint.num]][:3]
                 rotVec_z = applyRots[rotsMap[current_joint.num]][3:]
+                rotVec_x = np.cross(rotVec_y, rotVec_z)
+                rotVec_x = rotVec_x / np.linalg.norm(rotVec_x)
+                rotVec = np.concatenate((rotVec_x, rotVec_y, rotVec_z)).reshape((3,3))
+                currentRotation = Rot.from_matrix(rotVec).inv()
+
+                current_joint.apply_rot(currentRotation)
+            for child in current_joint.children:
+                operate_FK(child)
+        
+        operate_FK(self.all_joints[0])
+        
+    def forward_kinematics_UpperBody_vecs(self, applyRots):
+        #applyRots ndarray->shape=(12,6)
+        UpperJoints = [j for j in range(1, 13)]
+        def operate_FK(current_joint):
+            if current_joint.num in UpperJoints:
+                rotVec_y = applyRots[current_joint.num - 1][:3]
+                rotVec_z = applyRots[current_joint.num - 1][3:]
                 rotVec_x = np.cross(rotVec_y, rotVec_z)
                 rotVec_x = rotVec_x / np.linalg.norm(rotVec_x)
                 rotVec = np.concatenate((rotVec_x, rotVec_y, rotVec_z)).reshape((3,3))
@@ -238,6 +265,10 @@ class JointsInfo:
                 operate_FK(child)
         
         operate_FK(self.all_joints[0])
+    
+    def fk_rootY_test(self, applyRot):
+        targetRot = Rot.from_euler("y", applyRot, degrees=True)
+        self.all_joints[0].apply_rot(targetRot)
     
     def generate_standard_Tpose_from_this_bone_length(self):
         bone_length = []

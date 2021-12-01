@@ -142,6 +142,7 @@ class trainDataLoader:
         if num_files is not None:
             files = files[:num_files]
         for f in files:
+            thisFileStarted = False
             with open(f, 'rb') as pickle_file:
                 dataList = pickle.load(pickle_file)[0]
                 start = 0
@@ -200,7 +201,11 @@ class trainDataLoader:
 
                     #bodyWhole = np.concatenate((centerDistant.reshape((1,3)), bodyWhole), axis=0)
                     JI = JointsInfo(bodyWholePos)
-                    #allRots = JI.get_parent_17_rots()
+                    if not thisFileStarted:
+                        allRotsEul = JI.get_all_rots()
+                        for ti in range(21):
+                            print(allRotsEul[ti].as_euler("xyz", degrees=True))
+                        thisFileStarted = True
                     allRots = JI.get_all_rots_vecs()
                     if self.saved_Tpose is None and i > end - 10:
                         self.saved_Tpose = JI.generate_standard_Tpose_from_this_bone_length()
@@ -234,6 +239,7 @@ class trainDataLoader:
             self.objectMarkerData.append(np.array(markerPos))
             seqLength = len(bodyData)
             print("finish processing " + f)
+        #exit()
     
 
     def prepareDataset(self):

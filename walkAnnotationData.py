@@ -73,20 +73,22 @@ resultPhase = [{}, {}]
 
 #doing visualize stuff
 '''
-with open(pathName[0], 'rb') as f:
+with open(pathName[1], 'rb') as f:
     dataList = pickle.load(f)[0]
     
     print(len(dataList[0]))
     print("-----------------------")
-    startFrame = 373
-    endFrame = 480
+    startFrame = 0
+    endFrame = 2
     #endFrame = startFrame + 2
     videoLength = endFrame - startFrame
     skeledonData = dataList[0][startFrame:endFrame][:]
     skeledonData = np.array(skeledonData).reshape((videoLength, 21, 3))
     
     visualize(skeledonData, np.zeros([videoLength, 12, 3]), 0)
+exit()
 '''
+
 
 def getSeq(start, end, checkOutPhases, thisFileInfo):
     if checkOutPhases[start] == 0:
@@ -105,7 +107,10 @@ def getSeq(start, end, checkOutPhases, thisFileInfo):
 allDataX = []
 allDataY = []
 
-legRelatedPoints = [0, 13, 14, 15, 19, 16, 17, 18, 20]  #8+1
+legRelatedPoints = [0, 13, 14, 15, 19, 16, 17, 18, 20]  #8+1  7+1
+num_joints = 9
+#legRelatedPoints = [i for i in range(21)]  #all
+#num_joints = 21
 
 saved_Tpose = None
 for f_num in range(1):
@@ -129,6 +134,7 @@ for f_num in range(1):
                 wc_bc = wc_bc / np.linalg.norm(wc_bc)
                 wc_bc = np.array([[0,1,0], wc_bc])
                 adj_rot = R.match_vectors(np.array([[0,1,0], [0,0,1]]), wc_bc)[0]
+                #print(R.as_euler(adj_rot, "xyz"))
                 
             #bodyCenter = adj_rot.apply(np.array(dataList[0][frame][:3]) - worldCenter)
             #bodyWholePos = adj_rot.apply(np.array(dataList[0][frame][:]).reshape((21,3))- np.array(dataList[0][frame][:3]))
@@ -138,9 +144,21 @@ for f_num in range(1):
             skeledonData_current = np.array(skeledonData_current).reshape(21, 3)
             skeledonData_current[1:, :] -= skeledonData_current[0, :]  #
             
+            skeledonData_current[0, :] = adj_rot.apply(skeledonData_current[0, :] - worldCenter)
+            skeledonData_current[1:, :] = adj_rot.apply(skeledonData_current[1:, :])
+            
             JI = JointsInfo(skeledonData_current)
             
             skeledonData_current[0, :] -= worldCenter
+            
+            #'''
+            if frameI == 0:
+                allRotsEul = JI.get_all_rots()
+                for ti in range(21):
+                    #print(allRotsEul[ti].as_euler("xyz", degrees=True))
+                    pass
+                #exit()
+            #'''
             
             allRots = JI.get_all_rots_vecs()
             if saved_Tpose is None and frameI == 0:
@@ -148,23 +166,29 @@ for f_num in range(1):
             
             bodyRots = []
             for rotI, rot in enumerate(allRots):
-                if rotI not in legRelatedPoints and rotI is not 0:
+                if rotI not in legRelatedPoints: #and rotI is not 0:
                     continue
                 bodyRots += rot[0].tolist()  
-                bodyRots += rot[1].tolist()  
+                bodyRots += rot[1].tolist()
             
+            bodyRots = np.array(bodyRots)
             skeledonData_current = skeledonData_current[legRelatedPoints]
-            bodyCenter = skeledonData_current.reshape(( 9*3))[:3]
-            bodyPoses = skeledonData_current.reshape(( 9*3))[3:]
+            bodyCenter = skeledonData_current.reshape(( num_joints*3))[:3]
+            bodyPoses = skeledonData_current.reshape(( num_joints*3))[3:]
             
-            skeletonDataX.append( np.concatenate(([phase], bodyCenter, bodyRots, bodyPoses)) )
-            skeletonDataY.append( np.concatenate((bodyCenter, bodyRots, bodyPoses)) )
+            #bodyPoses = skeledonData_current.reshape(( num_joints*3))[:]
+            
+            skeletonDataX.append( np.concatenate(([phase],  bodyCenter, 
+                                                  bodyRots  * np.sin(phase * 3.14159265359) , bodyPoses  * np.sin(phase * 3.14159265359)
+                                                  ,bodyRots  * np.cos(phase * 3.14159265359) , bodyPoses  * np.cos(phase * 3.14159265359)   )) )
+            skeletonDataY.append( np.concatenate(( bodyCenter, bodyRots, bodyPoses)) )
         skeletonDataX = np.array(skeletonDataX)
         skeletonDataY = np.array(skeletonDataY)
         allDataX += skeletonDataX[:-1, :].tolist()
         allDataY += skeletonDataY[1:, :].tolist()
         print(np.array(allDataX).shape)
         print(np.array(allDataY).shape)
+        #exit()
         
 def getData():
     dataset = tf.data.Dataset.from_tensor_slices((allDataX, allDataY))

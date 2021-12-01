@@ -16,9 +16,9 @@ sbf.batch_size = 1
 max_target_len = 85 #130
 
 
-selectDataCount = 0  #6  4
+selectDataCount = 6  #6  4
 
-checkPointFolder = './Checkpoints/Checkpoints_sbf2/'
+checkPointFolder = './Checkpoints/Checkpoints_sbf3/'
 testFilePath = "./Tests/test_sbf1"
 
 

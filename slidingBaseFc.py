@@ -131,3 +131,20 @@ class SlidingBaseFc(keras.Model):
       current_result = tf.expand_dims(current_result, axis=1)
       result = tf.concat([result, current_result], axis = 1)
     return result
+
+  def generate_singleFrame(self, input_obj, input_human, useInitialPos=False):
+    #source = testX
+    if useInitialPos:
+      assert len(input_obj.shape) == 3 #b,T,F
+      initialPos = self.getInitialPos(input)
+      return initialPos
+    assert len(input_obj.shape) == 3 #b,T,F
+    assert len(input_human.shape) == 2  #b, F
+    
+    lastObj = input_obj[:, 0, :]
+    currentObj = input_obj[:, 1, :]
+    inputFeature = tf.concat([lastObj, currentObj, input_human], axis=-1)
+    current_result = self.getFollowingPos(inputFeature)
+    return current_result
+    
+    

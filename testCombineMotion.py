@@ -26,9 +26,9 @@ sbf.batch_size = 1
 
 
 
-selectDataCount = 4  #6  4
+selectDataCount = 6  #6  4
 
-checkPointFolder_sbf = './Checkpoints/Checkpoints_sbf2/'
+checkPointFolder_sbf = './Checkpoints/Checkpoints_sbf3/'
 testFilePath = "./Tests/test_combine1"
 
 
@@ -37,7 +37,7 @@ ft = testFilePath+"/testResult_t.pb"
 fP = testFilePath+"/testResult_p.pb"
 fG = testFilePath+"/testResult_g.pb"
 
-add_move = False
+add_move = True
 emphasize = False
 
 
@@ -62,9 +62,9 @@ x = tf.dtypes.cast(x, tf.float32)
 testx = np.copy(x.numpy())
 
 testx = testx.reshape((85,12,3))
-speed = np.array([0.04,-0.01,0.0])
+speed = np.array([0.01,-0.00,0.0])
 factor = np.array([1.4,1.,1.])
-startFrame = 25
+startFrame = 15
 if add_move:
     for i in range(startFrame, max_target_len):
         acc = i - startFrame + 1
@@ -98,19 +98,31 @@ with open(fN, 'wb') as pickle_file:
     bodyWhole_Result = []
     currentObjCenter = np.mean(testx.reshape((85,12,3)) * loader.obj_std_saved + loader.obj_mean_saved, axis=1)
     print(currentObjCenter.shape)
-    phases = np.concatenate((np.linspace(0.0, 1.0, 3), np.linspace(1.0, -1.0, 6), np.linspace(-1.0, 0.0, 3)))
+    phases = np.concatenate((np.linspace(0.2, 1.0, 6), np.linspace(0.9, -1.0, 8), np.linspace(-0.85, 0.0, 6)))
+    #phases = np.concatenate((np.linspace(0.3, -1.0, 7), np.linspace(-0.9, 1.0, 10), np.linspace(0.9, 0.4, 3)))
     phaseCount = 0
     for i in range(max_target_len - 1):
         #check hand object distance
         #if > some threshold: generating walk motions
         
-        if i >20:
+        allRotsSave_currentOutput = None
+        allPosesSave_currentOutput = None
+        bodyCenter_currentOutput = None
+        
+        bodyCenter = results[i, :3]      
+        allRotsSave = results[i, 3:-60].reshape((21,6))
+        allPosesSave = results[i, -60:].reshape((20,3))
+        
+        if i >15:
             allRotsSave_last = results[i-1, 3:-60].reshape((21,6))
             allPosesSave_last = results[i-1, -60:].reshape((20,3))
             bodyCenter_last = results[i-1, :3]
             bodyRots = allRotsSave_last[legRelatedPoints].flatten()
             bodyPoses = allPosesSave_last[legRelatedPoints_noRoot].flatten()
-            skeletonDataX =  np.concatenate(([phases[phaseCount % 12]],  bodyCenter_last, bodyRots, bodyPoses))
+            currentPhase = phases[phaseCount % 20]  #!!!!!!!!  14
+            skeletonDataX =  np.concatenate(([currentPhase],  bodyCenter_last, 
+                                             bodyRots * np.sin(currentPhase), bodyPoses * np.sin(currentPhase)
+                                             ,bodyRots * np.cos(currentPhase), bodyPoses * np.cos(currentPhase)))
             phaseCount += 1
             
             skeletonDataX = tf.convert_to_tensor(skeletonDataX.reshape((1, -1)), dtype=tf.float32)
@@ -118,6 +130,7 @@ with open(fN, 'wb') as pickle_file:
             testResult = testResult.numpy()[0, :]    #81
             
             #results[i, :3] = testResult[:3]  #bodyCenter
+            bodyCenter_currentOutput = testResult[:3]
             allRotsSave_currentOutput = testResult[3:-24].reshape((9,6))  #9
             allPosesSave_currentOutput = testResult[-24:].reshape((8,3))  
             
@@ -130,16 +143,26 @@ with open(fN, 'wb') as pickle_file:
             results[i, 3:-60] = allRotsSave.flatten()
             results[i, -60:] = allPosesSave.flatten()
         
-        bodyCenter = results[i, :3]      
-        allRotsSave = results[i, 3:-60].reshape((21,6))
-        allPosesSave = results[i, -60:].reshape((20,3))
+        
         
         JI = skeletonHandle.JointsInfo(bodyWhole_T)
-        JI.apply_global_trans(bodyCenter)
-        #if i <= 20:
-        JI.forward_kinematics_21Joints_vecs(allRotsSave)
-        #else:
-        #JI.forward_kinematics_Legs_vecs(allRotsSave_currentOutput)
-        bodyWhole_Result.append(JI.get_all_poses().reshape(63))
+        
+        #JI.forward_kinematics_21Joints_vecs(allRotsSave)
+        
+        
+        if i > 15:
+            #pass
+            #JI2 = skeletonHandle.JointsInfo(bodyWhole_T)
+            JI.fk_rootY_test(-90)
+            JI.apply_global_trans(bodyCenter_currentOutput)
+            JI.forward_kinematics_UpperBody_vecs(results[i, 3:-60].reshape((21,6))[ 1:13, :])
+            JI.forward_kinematics_Legs_vecs(allRotsSave_currentOutput[1:, :])
+            #allPoses[-8:, :] = allPosesSave_currentOutput[:, :] + bodyCenter
+        else:
+            JI.apply_global_trans(bodyCenter)
+            JI.forward_kinematics_21Joints_vecs(allRotsSave)
+        
+        allPoses = JI.get_all_poses()
+        bodyWhole_Result.append(allPoses.reshape(63))
     dataList = pickle.dump([np.array(bodyWhole_Result), testx * loader.obj_std_saved + loader.obj_mean_saved], pickle_file)
 print("job finished")
