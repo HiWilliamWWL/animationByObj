@@ -62,9 +62,9 @@ x = tf.dtypes.cast(x, tf.float32)
 testx = np.copy(x.numpy())
 
 testx = testx.reshape((85,12,3))
-speed = np.array([0.01,-0.00,0.0])
+speed = np.array([0.037,-0.01,0.0])
 factor = np.array([1.4,1.,1.])
-startFrame = 15
+startFrame = 35
 if add_move:
     for i in range(startFrame, max_target_len):
         acc = i - startFrame + 1
@@ -113,7 +113,7 @@ with open(fN, 'wb') as pickle_file:
         allRotsSave = results[i, 3:-60].reshape((21,6))
         allPosesSave = results[i, -60:].reshape((20,3))
         
-        if i >15:
+        if i >350:
             allRotsSave_last = results[i-1, 3:-60].reshape((21,6))
             allPosesSave_last = results[i-1, -60:].reshape((20,3))
             bodyCenter_last = results[i-1, :3]
@@ -150,11 +150,12 @@ with open(fN, 'wb') as pickle_file:
         #JI.forward_kinematics_21Joints_vecs(allRotsSave)
         
         
-        if i > 15:
+        if i > 350:
             #pass
             #JI2 = skeletonHandle.JointsInfo(bodyWhole_T)
             JI.fk_rootY_test(-90)
-            JI.apply_global_trans(bodyCenter_currentOutput)
+            #JI.apply_global_trans(bodyCenter_currentOutput)
+            JI.apply_global_trans(bodyCenter)
             JI.forward_kinematics_UpperBody_vecs(results[i, 3:-60].reshape((21,6))[ 1:13, :])
             JI.forward_kinematics_Legs_vecs(allRotsSave_currentOutput[1:, :])
             #allPoses[-8:, :] = allPosesSave_currentOutput[:, :] + bodyCenter

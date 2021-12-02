@@ -213,10 +213,10 @@ class JointsInfo:
     
     def forward_kinematics_Legs_vecs(self, applyRots):
         #applyRots ndarray->shape=(9,6) (8, 6)
-        #legJointsNo = [0, 13, 14, 15, 19, 16, 17, 18, 20]
-        #rotsMap = {0:0, 13:1, 14:2, 15:3, 16:4, 17:5, 18:6, 19:7, 20:8}
-        legJointsNo = [13, 14, 15, 19, 16, 17, 18, 20]
-        rotsMap = { 13:0, 14:1, 15:2, 16:3, 17:4, 18:5, 19:6, 20:7}
+        legJointsNo = [0, 13, 14, 15, 19, 16, 17, 18, 20]
+        rotsMap = {0:0, 13:1, 14:2, 15:3, 16:4, 17:5, 18:6, 19:7, 20:8}
+        #legJointsNo = [13, 14, 15, 19, 16, 17, 18, 20]
+        #rotsMap = { 13:0, 14:1, 15:2, 16:3, 17:4, 18:5, 19:6, 20:7}
         def operate_FK(current_joint):
             if current_joint.num in legJointsNo:
                 rotVec_y = applyRots[rotsMap[current_joint.num]][:3]
