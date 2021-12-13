@@ -113,56 +113,54 @@ class HOVAE(keras.Model):
         objInput = tf.dtypes.cast(objInput, tf.float32)
         humanInput = tf.dtypes.cast(humanInput, tf.float32)
         y_initalPos = humanInput[:, 0, :]
-        obj_center = self.getObjCenterInfo(batch_size, source)
-        y = tf.concat((target, obj_center), axis = -1)
+        obj_center = self.getObjCenterInfo(batch_size, objInput)
+        y = tf.concat((objInput, obj_center), axis = -1)
         with tf.GradientTape() as tape:
-        y_p, initalPos = self([source, target], training=True)
-        loss = self.compiled_loss(y_true={"final_result": y, "intial_human":y_initalPos}, y_pred={"final_result":y_p, "intial_human":initalPos})
-        trainable_vars = self.trainable_variables
-        gradients = tape.gradient(loss, trainable_vars)
-        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-        self.compiled_metrics.update_state(y_true={"final_result": y, "intial_human":y_initalPos}, y_pred={"final_result":y_p, "intial_human":initalPos})
+            y_p, initalPos = self([objInput, humanInput], training=True)
+            loss = self.compiled_loss(y_true={"final_result": y, "intial_human":y_initalPos}, y_pred={"final_result":y_p, "intial_human":initalPos})
+            trainable_vars = self.trainable_variables
+            gradients = tape.gradient(loss, trainable_vars)
+            self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+            self.compiled_metrics.update_state(y_true={"final_result": y, "intial_human":y_initalPos}, y_pred={"final_result":y_p, "intial_human":initalPos})
         return {m.name: m.result() for m in self.metrics}
 
-  def test_step(self, batch):
-    source, target = batch
-    target = tf.dtypes.cast(target, tf.float32)
-    source = tf.dtypes.cast(source, tf.float32)
-    y_initalPos = target[:, 0, :]
-    y = target[:, :, :]
+    def test_step(self, batch):
+        source, target = batch
+        target = tf.dtypes.cast(target, tf.float32)
+        source = tf.dtypes.cast(source, tf.float32)
+        y_initalPos = target[:, 0, :]
+        y = target[:, :, :]
 
-    preds, initalPos = self([source, target], training=False)
-    self.compiled_metrics.update_state(y_true={"final_result": y, "intial_human":y_initalPos}, y_pred={"final_result":preds, "intial_human":initalPos})
-    return {m.name: m.result() for m in self.metrics}
-  
-  def generate(self, testX):
-    source = testX
-    initialPos = self.getInitialPos(source)
-    result = tf.expand_dims(initialPos, axis=1)
+        preds, initalPos = self([source, target], training=False)
+        self.compiled_metrics.update_state(y_true={"final_result": y, "intial_human":y_initalPos}, y_pred={"final_result":preds, "intial_human":initalPos})
+        return {m.name: m.result() for m in self.metrics}
+    
+    def generate(self, testX):
+        source = testX
+        initialPos = self.getInitialPos(source)
+        result = tf.expand_dims(initialPos, axis=1)
 
-    for i in range(1, self.target_maxlen):
-      lastObj = source[:, i-1, :]
-      currentObj = source[:, i, :]
-      lastHuman = result[:, -1, :]
-      inputFeature = tf.concat([lastObj, currentObj, lastHuman], axis=-1)
-      current_result = self.getFollowingPos(inputFeature)
-      current_result = tf.expand_dims(current_result, axis=1)
-      result = tf.concat([result, current_result], axis = 1)
-    return result
+        for i in range(1, self.target_maxlen):
+            lastObj = source[:, i-1, :]
+            currentObj = source[:, i, :]
+            lastHuman = result[:, -1, :]
+            inputFeature = tf.concat([lastObj, currentObj, lastHuman], axis=-1)
+            current_result = self.getFollowingPos(inputFeature)
+            current_result = tf.expand_dims(current_result, axis=1)
+            result = tf.concat([result, current_result], axis = 1)
+        return result
 
-  def generate_singleFrame(self, input_obj, input_human, useInitialPos=False):
-    #source = testX
-    if useInitialPos:
-      assert len(input_obj.shape) == 3 #b,T,F
-      initialPos = self.getInitialPos(input)
-      return initialPos
-    assert len(input_obj.shape) == 3 #b,T,F
-    assert len(input_human.shape) == 2  #b, F
-    
-    lastObj = input_obj[:, 0, :]
-    currentObj = input_obj[:, 1, :]
-    inputFeature = tf.concat([lastObj, currentObj, input_human], axis=-1)
-    current_result = self.getFollowingPos(inputFeature)
-    return current_result
-    
-    
+    def generate_singleFrame(self, input_obj, input_human, useInitialPos=False):
+        #source = testX
+        if useInitialPos:
+            assert len(input_obj.shape) == 3 #b,T,F
+            initialPos = self.getInitialPos(input)
+        return initialPos
+        assert len(input_obj.shape) == 3 #b,T,F
+        assert len(input_human.shape) == 2  #b, F
+        
+        lastObj = input_obj[:, 0, :]
+        currentObj = input_obj[:, 1, :]
+        inputFeature = tf.concat([lastObj, currentObj, input_human], axis=-1)
+        current_result = self.getFollowingPos(inputFeature)
+        return current_result
