@@ -42,7 +42,7 @@ objDimention = 83 * 2 + 1  #36  fake now
 class trainDataLoader:
     def __init__(self, num_files = None, pathNames = ["./Data/liftOnly/*.data", "./Data/data_new/*.data"]):
         
-        self.maxLen = 85#85  35
+        self.maxLen = 85 #85  35
         
         self.skeletonData = []
         self.objectPosData = []

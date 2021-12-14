@@ -5,7 +5,7 @@ import numpy as np
 import glob
 import pickle
 import time
-import tensorflow as tf
+#import tensorflow as tf
 from skeletonHandle import JointsInfo
 from scipy.spatial.transform import Rotation as R
 
@@ -14,7 +14,7 @@ fig = plt.figure()
 ax = fig.add_subplot(111 , projection="3d")
 
 startFrame = 0
-
+step = 4
 
 
 connections = [(0, 1), (1, 2), (2, 3), (3, 4), 
@@ -24,13 +24,13 @@ connections = [(0, 1), (1, 2), (2, 3), (3, 4),
                              (0, 16), (16, 17), (17, 18)]
 
 def updateHumanObj(frame, *fargs):
-    global startFrame
+    global startFrame, step
     ax.clear()
     bodyData, objPoint, scat = fargs
     z_points = bodyData[frame, :, 2] #* -1.0
     x_points = bodyData[frame, :, 0]
     y_points = bodyData[frame, :, 1]
-    print(frame + startFrame)
+    print(frame * step + startFrame)
     for connect in connections:
         a,b = connect
         ax.plot([x_points[a], x_points[b]],[y_points[a],y_points[b]],[z_points[a],z_points[b]], color="b")
@@ -64,56 +64,93 @@ def visualize(skeledonData, objPoint, startFrame = 0):
                                   fargs=(bodyData, objPoint, scat))
     plt.show()
 
-wwl_walk_phase = {30:0, 113:1, 192:-1, 259:1, 340:-1, 418:1, 493:-1}
-yl_walk_phase = {78:0, 139:-1, 220:1, 300:-1, 373:1, 463:-1}
-pathName = ["./Data/walkData/oneFile/wwl_board_w_001.data", "./Data/walkData/yl_table_walk_001.data"]
+#left_forward:-1, right_forward: 1, EOF:-10, Start:10
+zyf_001_phase = {80:10, 490:0, 542:-1, 610:1, 800:-10}
+zyf_002_phase = {100:10, 545:0, 615:1, 750:-10}
+tinalf_001_phase = {40:0, 120:-1, 165:0, 460:0, 520:1, 600:-1, 710:1}
+tinalf_003_phase = {100:0, 180:1, 220:0, 500:0, 600:-1, 685:1, 800:-1, 910:1}
+tinalayfd_003_phase = {140:0, 172:1, 215:0, 520:0, 580:1, 650:-1, 690:0, 850:-10}
 
-phasesInfo = [wwl_walk_phase, yl_walk_phase]
+pathName = ["./Data/box_walk_small/zyf_box_lay_fd_001.data", 
+            "./Data/box_walk_small/zyf_box_lay_fd_002.data", 
+            "./Data/box_walk_small/tina_box2_l_f_001.data",
+            "./Data/box_walk_small/tina_box2_l_f_003.data",
+            "./Data/box_walk_small/tina_box2_lay_fd_003.data"]
+
+
+
+
+phasesInfo = [zyf_001_phase, zyf_002_phase, tinalf_001_phase, tinalf_003_phase, tinalayfd_003_phase]
 resultPhase = [{}, {}]
 
-#doing visualize stuff
+#doing visualize
 '''
-with open(pathName[1], 'rb') as f:
+with open(pathName[0], 'rb') as f:
     dataList = pickle.load(f)[0]
+    
     
     print(len(dataList[0]))
     print("-----------------------")
-    startFrame = 0
-    endFrame = 2
+    startFrame = 100
+    endFrame = 545
     #endFrame = startFrame + 2
     videoLength = endFrame - startFrame
-    skeledonData = dataList[0][startFrame:endFrame][:]
+    skeledonData = dataList[0][startFrame:endFrame:step][:]
+    videoLength = len(skeledonData)
     skeledonData = np.array(skeledonData).reshape((videoLength, 21, 3))
     
-    visualize(skeledonData, np.zeros([videoLength, 12, 3]), 0)
+    objData = dataList[3][startFrame:endFrame:step][:]
+    objData = np.array(objData).reshape((videoLength, 12, 3))
+    
+    visualize(skeledonData, objData, 0)
 exit()
 '''
 
 
-def getSeq(start, end, checkOutPhases, thisFileInfo):
-    if checkOutPhases[start] == 0:
-        numOfPoints = 3
-        theSeqIdx = np.around(np.linspace(start, end, num = numOfPoints)).astype(np.int)
-        thePhase = np.linspace(0.0, checkOutPhases[end], num = numOfPoints)
+def getSeq(count, start, end, checkOutPhases, thisFileInfo):
+    # start end: real frame idx in the dataList. e.g. 490; 542
+    if count == 0:
+        if checkOutPhases[start] == 10:
+            numOfPoints = 25
+            theSeqIdx = np.around(np.linspace(start, end, num = numOfPoints)).astype(np.int)
+            thePhase = np.linspace(0.0, 0.0, num = numOfPoints)
+            for i,idx in enumerate(theSeqIdx):
+                thisFileInfo[idx] = thePhase[i]
+        else:
+            thisFileInfo[start - 10] = 0.0
+            numOfPoints = 4
+            theSeqIdx = np.around(np.linspace(start, end, num = numOfPoints)).astype(np.int)
+            thePhase = np.linspace(0.0, checkOutPhases[end], num = numOfPoints)
+            for i,idx in enumerate(theSeqIdx):
+                thisFileInfo[idx] = thePhase[i]
+    elif checkOutPhases[end] == -10:
+        numOfPoints = 12
+        theSeqIdx = np.around(np.linspace(start + step, end, num = numOfPoints)).astype(np.int)
+        thePhase = np.linspace(0.0, 0.0, num = numOfPoints)
         for i,idx in enumerate(theSeqIdx):
             thisFileInfo[idx] = thePhase[i]
     else: 
-        numOfPoints = 6
+        numOfPoints = 8
+        if (checkOutPhases[start] == -1 or checkOutPhases[start] == 1) and checkOutPhases[end] == 0.0:
+            numOfPoints = 4
+        elif checkOutPhases[start] == 0 and checkOutPhases[end] == 0:
+            numOfPoints = 25
         theSeqIdx = np.around(np.linspace(start, end, num = numOfPoints)).astype(np.int)
         thePhase = np.linspace(checkOutPhases[start], checkOutPhases[end], num = numOfPoints)
         for i,idx in enumerate(theSeqIdx[1:]):
             thisFileInfo[idx] = thePhase[i+1]
 
+# packed data stored here
+allObjectMarkers = []
 allDataX = []
 allDataY = []
 
 legRelatedPoints = [0, 13, 14, 15, 19, 16, 17, 18, 20]  #8+1  7+1
-num_joints = 9
-#legRelatedPoints = [i for i in range(21)]  #all
-#num_joints = 21
+num_joints = 21
 
 saved_Tpose = None
-for f_num in range(1):
+# len(phasesInfo)
+for f_num in range(5):
     with open(pathName[f_num], 'rb') as f:
         dataList = pickle.load(f)[0]
         checkOutPhases = phasesInfo[f_num]
@@ -121,10 +158,11 @@ for f_num in range(1):
         endList = list(checkOutPhases.keys())[1:]
         thisFileInfo = {}
         for count in range(len(startList)):
-            getSeq(startList[count], endList[count], checkOutPhases, thisFileInfo)
+            getSeq(count, startList[count], endList[count], checkOutPhases, thisFileInfo)
         
         skeletonDataX = []
         skeletonDataY = []
+        objectMarkers = []
         worldCenter = None
         for frameI, frame in enumerate(thisFileInfo):   #[0, 1, 2, ...]   [30, 42, 54, 66, ...]
             if frameI == 0:
@@ -141,6 +179,9 @@ for f_num in range(1):
                 
             skeledonData_current = dataList[0][frame][:]
             phase = thisFileInfo[frame]
+            phaseLabel = 0.0
+            if phase > 0.001 or phase < -0.001:
+                phaseLabel = 1.0
             skeledonData_current = np.array(skeledonData_current).reshape(21, 3)
             skeledonData_current[1:, :] -= skeledonData_current[0, :]  #
             
@@ -149,7 +190,7 @@ for f_num in range(1):
             
             JI = JointsInfo(skeledonData_current)
             
-            skeledonData_current[0, :] -= worldCenter
+            #skeledonData_current[0, :] -= worldCenter
             
             #'''
             if frameI == 0:
@@ -166,31 +207,46 @@ for f_num in range(1):
             
             bodyRots = []
             for rotI, rot in enumerate(allRots):
-                if rotI not in legRelatedPoints: #and rotI is not 0:
-                    continue
+                #if rotI not in legRelatedPoints: #and rotI is not 0:
+                    #continue
                 bodyRots += rot[0].tolist()  
                 bodyRots += rot[1].tolist()
             
             bodyRots = np.array(bodyRots)
-            skeledonData_current = skeledonData_current[legRelatedPoints]
+            #skeledonData_current = skeledonData_current[legRelatedPoints]
             bodyCenter = skeledonData_current.reshape(( num_joints*3))[:3]
             bodyPoses = skeledonData_current.reshape(( num_joints*3))[3:]
             
-            #bodyPoses = skeledonData_current.reshape(( num_joints*3))[:]
+            objMarkers = adj_rot.apply(np.array(dataList[3][frame]) - worldCenter).reshape(12 * 3)
             
+            objectMarkers.append(objMarkers)
             skeletonDataX.append( np.concatenate(([phase],  bodyCenter, 
                                                   bodyRots  * np.sin(phase * 3.14159265359) , bodyPoses  * np.sin(phase * 3.14159265359)
                                                   ,bodyRots  * np.cos(phase * 3.14159265359) , bodyPoses  * np.cos(phase * 3.14159265359)   )) )
-            skeletonDataY.append( np.concatenate(( bodyCenter, bodyRots, bodyPoses)) )
+            skeletonDataY.append( np.concatenate(([phaseLabel], bodyCenter, bodyRots, bodyPoses)) )
+        
+        objectMarkers = np.array(objectMarkers)
         skeletonDataX = np.array(skeletonDataX)
         skeletonDataY = np.array(skeletonDataY)
+        
         allDataX += skeletonDataX[:-1, :].tolist()
         allDataY += skeletonDataY[1:, :].tolist()
+        
+        allObjectMarkers += objectMarkers[1:, :].tolist()
+        
         print(np.array(allDataX).shape)
         print(np.array(allDataY).shape)
-        #exit()
-        
+        print(np.array(allObjectMarkers).shape)
+
+allDataY_vis = np.array(allDataY)
+num_data = len(allDataY)
+allDataY_vis_global = allDataY_vis[:, 1:4].reshape((num_data, 1, 3))
+allDataY_vis = allDataY_vis_global + allDataY_vis[:, -60:].reshape((num_data, num_joints - 1, 3))
+allDataY_vis = np.concatenate((allDataY_vis_global, allDataY_vis), axis=1)
+visualize(allDataY_vis, np.array(allObjectMarkers).reshape((num_data, 12, 3)), 0)
+
+'''  
 def getData():
     dataset = tf.data.Dataset.from_tensor_slices((allDataX, allDataY))
     return dataset
-        
+'''

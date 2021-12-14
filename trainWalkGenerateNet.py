@@ -30,9 +30,9 @@ import losses
 #losses.loader = loader
 losses.batch_size = batch_size
 
-checkPointFolder = './Checkpoints/Checkpoints_wgn1/'
+checkPointFolder = './Checkpoints/Checkpoints_wgn2/'
 #model = wgn.walkGenerateNet(num_hid=128, target_maxlen=max_target_len, num_classes=dataLoader.humanDimensionWalkOutput, num_experts = 3, num_input_dimension = dataLoader.objDimention)
-model = wgn.walkGenerateNet(num_hid=128, target_maxlen=max_target_len, num_classes=81, num_experts = 3, num_input_dimension = 64)
+model = wgn.walkGenerateNet(num_hid=128, target_maxlen=max_target_len, num_classes=82, num_experts = 3, num_input_dimension = 64)
 model.compile(optimizer=optimizer, loss=losses.basicMSE, metrics='mean_squared_error')
 
 #full_dataset = loader.getDataset3()
