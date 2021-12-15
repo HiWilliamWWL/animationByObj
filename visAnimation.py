@@ -13,7 +13,7 @@ ax = fig.add_subplot(111 , projection="3d")
 objName = "tripod"
 
 #testFilePath = "./Tests/test_combine1/"
-testFilePath = "./Tests/test_wgn1/"
+testFilePath = "./Tests/test_wgn2/"
 #testFilePath = "./Tests/test_sbf1/"
 
 print(testFilePath)

@@ -18,7 +18,7 @@ import walkGenerateNet as wgn
 max_target_len = 85 #85  35
 
 batch_size = wgn.batch_size
-val_data_num = 10
+val_data_num = 8
 #val_data_num = 3
 
 optimizer = keras.optimizers.Adam(0.001)
@@ -32,15 +32,15 @@ losses.batch_size = batch_size
 
 checkPointFolder = './Checkpoints/Checkpoints_wgn2/'
 #model = wgn.walkGenerateNet(num_hid=128, target_maxlen=max_target_len, num_classes=dataLoader.humanDimensionWalkOutput, num_experts = 3, num_input_dimension = dataLoader.objDimention)
-model = wgn.walkGenerateNet(num_hid=128, target_maxlen=max_target_len, num_classes=82, num_experts = 3, num_input_dimension = 64)
+model = wgn.walkGenerateNet(num_hid=256, target_maxlen=max_target_len, num_classes=190, num_experts = 3, num_input_dimension = 376)
 model.compile(optimizer=optimizer, loss=losses.basicMSE, metrics='mean_squared_error')
 
 #full_dataset = loader.getDataset3()
 full_dataset = walkAnnotationData.getData()
-#full_dataset = full_dataset.shuffle(100, reshuffle_each_iteration=True)
+full_dataset = full_dataset.shuffle(100, reshuffle_each_iteration=True)
 val_dataset = full_dataset.take(val_data_num).batch(batch_size) 
 train_dataset = full_dataset.skip(val_data_num).batch(batch_size)
-#train_dataset = train_dataset.shuffle(100, reshuffle_each_iteration=True)
+train_dataset = train_dataset.shuffle(100, reshuffle_each_iteration=True)
 
 
 if not os.path.exists(checkPointFolder):
